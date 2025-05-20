@@ -5,7 +5,7 @@ const LoadingScreen = () => {
   return (
     <View style={styles.container}>
       <Image
-        source={require('../assets/logo.png')}
+        source={require('../../assets/logo.png')}
         style={styles.logo}
       />
       <ActivityIndicator size="large" color="#007AFF" style={styles.spinner} />

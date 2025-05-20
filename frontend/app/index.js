@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import LoadingScreen from './components/LoadingScreen'; // Ton écran de chargement
-import MainScreen from './components/Login'; // Ton écran principal
+import LoadingScreen from './Screens/commun/LoadingScreen'; 
+import MainScreen from './Screens/Login/Login'; 
 
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -8,7 +8,7 @@ const App = () => {
   useEffect(() => {
     setTimeout(() => {
       setIsLoading(false);
-    }, 2000); // Simulation de chargement
+    }, 2000); 
   }, []);
 
   return isLoading ? <LoadingScreen /> : <MainScreen />;
