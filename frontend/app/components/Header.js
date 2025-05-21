@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
-import { User } from "lucide-react-native"
+import { User, CornerUpRight } from "lucide-react-native"
 
-export default function Header({ username }) {
+export default function Header({ username, showTransferIcon, onTransfer }) {
   return (
     <View style={styles.header}>
       <View style={styles.userInfo}>
@@ -11,7 +11,11 @@ export default function Header({ username }) {
         <Text style={styles.userName}>{username}</Text>
       </View>
       <View style={styles.headerIcons}>
-        
+        {showTransferIcon && (
+          <TouchableOpacity style={styles.iconButton} onPress={onTransfer}>
+            <CornerUpRight size={24} color="#52AFD4" />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   )

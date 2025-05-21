@@ -8,14 +8,14 @@ export default function NavigationArrows({ currentId, maxId }) {
   const router = useRouter()
 
   const goToPrevious = () => {
-    const prevId = String(Math.max(1, Number(currentId) - 1))
-    router.replace({ pathname: "/details", params: { id: prevId } })
-  }
-
+    const prevId = String(Math.max(1, Number(currentId) - 1));
+    onNavigate(prevId); // onNavigate est une fonction passée en prop depuis le parent
+  };
+  
   const goToNext = () => {
-    const nextId = String(Math.min(Number(maxId), Number(currentId) + 1))
-    router.replace({ pathname: "/details", params: { id: nextId } })
-  }
+    const nextId = String(Math.min(Number(maxId), Number(currentId) + 1));
+    onNavigate(nextId);
+  };
 
   return (
     <View style={styles.navigationArrows}>

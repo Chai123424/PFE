@@ -1,30 +1,38 @@
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
-import { Link } from "expo-router"
 
-export default function AppointmentCard({ appointment }) {
+export default function AppointmentCard({ appointment, onPress}) {
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "En cours":
+        return "#4CAF50" // Green
+      case "Terminé":
+        return "#52AFD4" // Bleu du thème
+      case "À faire":
+        return "#FFC107" // Yellow/Amber
+      default:
+        return "#FFC107"
+    }
+  }
+
   return (
-    <Link href={{ pathname: "/details", params: { id: appointment.id } }} asChild>
-      <TouchableOpacity style={styles.appointmentCard}>
-        <View style={styles.appointmentContent}>
+    <TouchableOpacity style={styles.appointmentCard} onPress={() => {
+      console.log("Card pressed, id:", appointment.id);
+      onPress && onPress();
+    }}>
+        <View style={styles.leftContent}>
           <Text style={styles.appointmentName}>{appointment.name || "----------"}</Text>
           <Text style={styles.appointmentDetails}>
             {appointment.code}-{appointment.type}
           </Text>
         </View>
-        <View style={styles.appointmentTimeContainer}>
+        <View style={styles.rightContent}>
           <Text style={styles.appointmentTime}>{appointment.time}</Text>
-          {appointment.status === "En cours" ? (
-            <View style={styles.statusPill}>
-              <Text style={styles.statusText}>{appointment.status}</Text>
-            </View>
-          ) : (
-            <View style={styles.distancePill}>
-              <Text style={styles.distanceText}>{appointment.distance}</Text>
-            </View>
-          )}
+          <View style={[styles.statusPill, { backgroundColor: getStatusColor(appointment.status) }]}> 
+            <Text style={styles.statusText}>{appointment.status}</Text>
+          </View>
         </View>
       </TouchableOpacity>
-    </Link>
+   
   )
 }
 
@@ -32,42 +40,57 @@ const styles = StyleSheet.create({
   appointmentCard: {
     flexDirection: "row",
     justifyContent: "space-between",
-    backgroundColor: "#e6f2f7",
+    alignItems: "center",
+    backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#add8e6",
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: "#52AFD4",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  appointmentContent: {
+  leftContent: {
     flex: 1,
+  },
+  rightContent: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minWidth: 90,
   },
   appointmentName: {
     fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 4,
+    fontWeight: "600",
+    color: "#52AFD4",
+    marginBottom: 2,
   },
   appointmentDetails: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#666",
-  },
-  appointmentTimeContainer: {
-    alignItems: "flex-end",
   },
   appointmentTime: {
     fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 4,
+    fontWeight: "700",
+    color: "#222",
+    marginBottom: 8,
   },
   statusPill: {
-    backgroundColor: "#52AFD4",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
+    minWidth: 70,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 2,
   },
   statusText: {
-    color: "white",
-    fontSize: 12,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
   },
-  
 })

@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#3333CC",
+    color: "#52AFD4",
   },
   shareButton: {
     padding: 8,
