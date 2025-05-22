@@ -17,7 +17,7 @@ export default function AppointmentCard({ appointment, onPress}) {
   return (
     <TouchableOpacity style={styles.appointmentCard} onPress={() => {
       console.log("Card pressed, id:", appointment.id);
-      onPress && onPress();
+      onPress && onPress(appointment.id); // Pass the appointment ID here
     }}>
         <View style={styles.leftContent}>
           <Text style={styles.appointmentName}>{appointment.name || "----------"}</Text>

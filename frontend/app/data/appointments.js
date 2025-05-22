@@ -126,7 +126,7 @@ export const appointmentDetails = {
 
 
 // Sample data with dates for filtering and status
-export const allAppointments = [
+export let allAppointments = [
   {
     id: "1",
     name: "Msefer Chakir",
@@ -228,8 +228,13 @@ export const filterAppointments = (appointments, searchQuery, activeTab) => {
   } else {
     const query = searchQuery.toLowerCase()
     return dateFiltered.filter(
-      (appointment) => appointment.name.toLowerCase().includes(query) || appointment.code.includes(query),
+      (appointment) => (typeof appointment.name === 'string' && appointment.name.toLowerCase().includes(query)) || (typeof appointment.code === 'string' && appointment.code.includes(query))
     )
   }
 }
+
+export const removeAppointment = (idToRemove) => {
+  allAppointments = allAppointments.filter(appointment => appointment.id !== idToRemove);
+};
+
 export default appointments;

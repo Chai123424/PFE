@@ -1,50 +1,62 @@
 "use client"
 
-import { View, StyleSheet, TouchableOpacity } from "react-native"
-import { ChevronLeft, ChevronRight } from "lucide-react-native"
+import { View, StyleSheet, TouchableOpacity, Text } from "react-native"
 import { useRouter } from "expo-router"
+import { filterAppointments } from "../data/appointments"
 
-export default function NavigationArrows({ currentId, maxId }) {
+export default function NavigationArrows({ allAppointments, currentId, category }) {
   const router = useRouter()
 
-  const goToPrevious = () => {
-    const prevId = String(Math.max(1, Number(currentId) - 1));
-    onNavigate(prevId); // onNavigate est une fonction passée en prop depuis le parent
-  };
-  
-  const goToNext = () => {
-    const nextId = String(Math.min(Number(maxId), Number(currentId) + 1));
-    onNavigate(nextId);
-  };
+  // Filter appointments by the given category
+  const categorizedAppointments = category ? filterAppointments(allAppointments, '', category) : [];
+
+  // Find the index of the current appointment in the categorized list
+  const currentIndex = categorizedAppointments.findIndex(app => app.id === currentId);
+
+  // Determine the previous and next appointment IDs based on the categorized list
+  const prevId = currentIndex > 0 ? categorizedAppointments[currentIndex - 1].id : null;
+  const nextId = currentIndex < categorizedAppointments.length - 1 ? categorizedAppointments[currentIndex + 1].id : null;
 
   return (
-    <View style={styles.navigationArrows}>
-      <TouchableOpacity style={styles.arrowButton} onPress={goToPrevious}>
-        <ChevronLeft size={24} color="#fff" />
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.arrowButton} onPress={goToNext}>
-        <ChevronRight size={24} color="#fff" />
-      </TouchableOpacity>
+    <View style={styles.container}>
+      {/* Left slot: Previous button or placeholder */}
+      {prevId ? (
+        <TouchableOpacity onPress={() => router.push('/DetailScreen?id=' + prevId)} style={styles.arrowButton}>
+          <Text style={styles.arrowText}>{"<"}</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.placeholder} />
+      )}
+      {/* Right slot: Next button or placeholder */}
+      {nextId ? (
+        <TouchableOpacity onPress={() => router.push('/DetailScreen?id=' + nextId)} style={styles.arrowButton}>
+          <Text style={styles.arrowText}>{ ">"}</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.placeholder} />
+      )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  navigationArrows: {
+  container: {
     flexDirection: "row",
     justifyContent: "space-between",
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    right: 20,
+    paddingHorizontal: 20,
+    marginTop: 20,
   },
   arrowButton: {
-    backgroundColor: "#add8e6",
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
+    padding: 10,
+    backgroundColor: "#52AFD4",
+    borderRadius: 5,
   },
+  arrowText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  placeholder: {
+    flex: 1,
+  }
 })
