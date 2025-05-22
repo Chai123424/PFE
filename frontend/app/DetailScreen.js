@@ -36,16 +36,16 @@ export default function DetailScreen() {
   }
 
   const handleLaunch = () => {
-    router.push('/InfoScreen')
+    router.push('./Screens/InfoScreen')
   }
 
   const handleReport = () => {
     removeAppointment(id);
-    router.replace({ pathname: '/', params: { category: currentAppointmentCategory } });
+    router.replace({ pathname: '/Screens/HomeScreen', params: { category: currentAppointmentCategory } });
   }
 
   const handleTransfer = () => {
-    router.push('/TransferScreen')
+    router.push('./Screens/TransferScreen')
   }
 
   if (!appointmentDetails[id]) {

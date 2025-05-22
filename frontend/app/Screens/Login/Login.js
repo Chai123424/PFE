@@ -26,7 +26,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     // Simuler un login réussi
     await AsyncStorage.setItem('isLoggedIn', 'true');
-    router.replace('/home'); // Redirection vers la home
+    router.replace('/HomeScreen'); 
   };
 
   return (
