@@ -11,7 +11,7 @@ export default function Index() {
     const checkLogin = async () => {
       const value = await AsyncStorage.getItem('isLoggedIn');
       setIsLoggedIn(value === 'true');
-      setTimeout(() => setReady(true), 2000); // simulate loading
+      setTimeout(() => setReady(true), 2000); 
     };
     checkLogin();
   }, []);
