@@ -5,65 +5,45 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Image,
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';  
 
 const HeaderS = () => {
-    const navigation = useNavigation();
+  const router = useRouter();
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
       {/* Header avec bouton retour */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.navigate('DetailScreen')}
-        >
-          <Ionicons name="chevron-back" size={30} color="#1f3493" />
-        </TouchableOpacity>
+      <TouchableOpacity 
+        style={styles.backButton}
+        onPress={() => router.back()}  
+      >
+        <Ionicons name="chevron-back" size={30} color="#1f3493" />
+      </TouchableOpacity>
 
-        {/* Logo et titre */}
-       
-        
         <Text style={styles.welcomeText}>Information</Text>
-        
-      
       </View>
-
-      
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flex: 0.2,
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
   },
   header: {
-    
-    display: 'flex',
     flexDirection: 'row',
     marginRight: 20,
   },
   backButton: {
     paddingTop: 15,
-    
-  },
-  logoContainer: {
-    marginTop: 20,
-    display: 'flex',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  logo: {
-    width: 60,
-    height: 60,
   },
   welcomeText: {
     fontSize: 25,

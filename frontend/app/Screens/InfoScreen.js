@@ -4,11 +4,13 @@ import { useState, useEffect } from "react"
 import { StyleSheet, View, Text, TouchableOpacity, Image, SafeAreaView, StatusBar, Button, Alert } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import { Ionicons } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
 
 export default function ProfileInfoScreen({ navigation }) {
   const [beforeImage, setBeforeImage] = useState(null)
   const [afterImage, setAfterImage] = useState(null)
   const [activeSection, setActiveSection] = useState(null) // 'before' or 'after'
+  const router = useRouter()
 
   useEffect(() => {
     ;(async () => {
@@ -61,7 +63,7 @@ export default function ProfileInfoScreen({ navigation }) {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('DetailScreen')} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#3333CC" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>informations</Text>
@@ -118,7 +120,7 @@ export default function ProfileInfoScreen({ navigation }) {
       </View>
 
       {/* Finish Button */}
-      <TouchableOpacity style={styles.finishButton} onPress={() => navigation.navigate('ConfirmationScreen')}>
+      <TouchableOpacity style={styles.finishButton} onPress={() => router.push('ConfirmationScreen')}>
         <Text style={styles.finishButtonText}>Terminé</Text>
       </TouchableOpacity>
     </SafeAreaView>

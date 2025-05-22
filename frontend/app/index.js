@@ -1,48 +1,21 @@
-// import React, { useState, useEffect } from 'react';
-// import LoadingScreen from './Screens/commun/LoadingScreen'; 
-// import MainScreen from './Screens/Login/Login'; 
+import { useEffect, useState } from 'react';
+import { Redirect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import LoadingScreen from './Screens/commun/LoadingScreen';
 
-// const App = () => {
-//   const [isLoading, setIsLoading] = useState(true);
+export default function Index() {
+  const [ready, setReady] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-//   useEffect(() => {
-//     setTimeout(() => {
-//       setIsLoading(false);
-//     }, 2000); 
-//   }, []);
+  useEffect(() => {
+    const checkLogin = async () => {
+      const value = await AsyncStorage.getItem('isLoggedIn');
+      setIsLoggedIn(value === 'true');
+      setTimeout(() => setReady(true), 2000); // simulate loading
+    };
+    checkLogin();
+  }, []);
 
-//   return isLoading ? <LoadingScreen /> : <MainScreen />;
-// };
-
-
-// import { registerRootComponent } from 'expo';
-// import { SafeAreaProvider } from 'react-native-safe-area-context';
-// import Transfert from './Screens/TransferScreen';
-
-// function App() {
-//   return (
-//     <SafeAreaProvider>
-//       <Transfert />
-//     </SafeAreaProvider>
-//   );
-// }
-
-// Correction ici 👇
-// export default App;
-// registerRootComponent(App);
-
-// import { registerRootComponent } from 'expo';
-// import { SafeAreaProvider } from 'react-native-safe-area-context';
-// import Info from './Screens/InfoScreen';
-
-// function App() {
-//   return (
-//     <SafeAreaProvider>
-//       <Info />
-//     </SafeAreaProvider>
-//   );
-// }
-
-// // Correction ici 👇
-// export default App;
-// registerRootComponent(App);
+  if (!ready) return <LoadingScreen />;
+  return <Redirect href={isLoggedIn ? './Screens/TransferScreen' : '/loginScreen'} />;
+}

@@ -7,18 +7,18 @@ import {
   Alert,
   TextInput,
   ScrollView,
-Image,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { Feather } from '@expo/vector-icons';
-import HeaderS from '../components/header';
-import { useNavigation } from '@react-navigation/native';
+import HeaderS from '../components/headerI';
+import { useRouter } from 'expo-router';  // <-- import useRouter
 
 const TransferApp = () => {
   const [selectedTech, setSelectedTech] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-    const navigation = useNavigation();
+  const router = useRouter();  // <-- utiliser useRouter à la place de useNavigation
 
   const technicians = [
     { id: 1, name: 'Samir' },
@@ -50,9 +50,13 @@ const TransferApp = () => {
         text: 'Confirmer',
         onPress: () => {
           Alert.alert('Succès', `Transfert effectué vers ${techName}`, [
-            { text: 'OK', onPress: () => {
-            setSelectedTech(null);
-            navigation.navigate('HomeScreen');} },
+            {
+              text: 'OK',
+              onPress: () => {
+                setSelectedTech(null);
+                router.push('/home');  
+              },
+            },
           ]);
         },
       },
@@ -78,7 +82,10 @@ const TransferApp = () => {
         />
       </View>
 
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
         {filteredTechnicians.map((tech) => (
           <View key={tech.id} style={styles.techItem}>
             <Image
@@ -105,10 +112,7 @@ const TransferApp = () => {
       <View style={styles.separator} />
 
       <TouchableOpacity
-        style={[
-          styles.transferButton,
-          !selectedTech && styles.disabledButton,
-        ]}
+        style={[styles.transferButton, !selectedTech && styles.disabledButton]}
         onPress={handleTransfer}
         disabled={!selectedTech}
       >

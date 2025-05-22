@@ -12,30 +12,28 @@ import {
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const LoginScreen = ({ navigation }) => {
+export default function LoginScreen() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [dbName, setDbName] = useState('');
   const [url, setUrl] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = () => {
-    // Logique de connexion à implémenter
-    console.log('Login avec:', { email, password, dbName, url });
+  const handleLogin = async () => {
+    // Simuler un login réussi
+    await AsyncStorage.setItem('isLoggedIn', 'true');
+    router.replace('/home'); // Redirection vers la home
   };
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" />
-        
-        {/* Header avec bouton retour */}
-        <View style={styles.header}>
-          
-        </View>
 
-        {/* Logo et titre */}
         <View style={styles.logoContainer}>
           <Image
             source={require('../../assets/logo.png')}
@@ -45,7 +43,6 @@ const LoginScreen = ({ navigation }) => {
           <Text style={styles.welcomeText}>Bienvenue</Text>
         </View>
 
-        {/* Formulaire */}
         <View style={styles.formContainer}>
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -68,14 +65,14 @@ const LoginScreen = ({ navigation }) => {
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
             />
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.eyeIcon}
               onPress={() => setShowPassword(!showPassword)}
             >
-              <Ionicons 
-                name={showPassword ? "eye-off" : "eye"} 
-                size={24} 
-                color="#A0A0A0" 
+              <Ionicons
+                name={showPassword ? 'eye-off' : 'eye'}
+                size={24}
+                color="#A0A0A0"
               />
             </TouchableOpacity>
           </View>
@@ -98,28 +95,19 @@ const LoginScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* Bouton de connexion */}
-        <TouchableOpacity 
-          style={styles.loginButton}
-          onPress={handleLogin}
-        >
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginButtonText}>Log In</Text>
         </TouchableOpacity>
       </SafeAreaView>
     </TouchableWithoutFeedback>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
   },
   logoContainer: {
     alignItems: 'center',
@@ -184,5 +172,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-
-export default LoginScreen;
