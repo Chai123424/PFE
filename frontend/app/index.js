@@ -1,8 +1,9 @@
+
 import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LoadingScreen from './Screens/commun/LoadingScreen';
-
+import HomeScreen from "./screens/HomeScreen";
 export default function Index() {
   const [ready, setReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -17,5 +18,9 @@ export default function Index() {
   }, []);
 
   if (!ready) return <LoadingScreen />;
-  return <Redirect href={isLoggedIn ? './Screens/TransferScreen' : '/loginScreen'} />;
+  return <Redirect href={isLoggedIn ? './Screens/HomeScreen' : '/loginScreen'} />;
 }
+
+
+
+
