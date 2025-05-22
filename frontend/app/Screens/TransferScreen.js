@@ -54,7 +54,7 @@ const TransferApp = () => {
               text: 'OK',
               onPress: () => {
                 setSelectedTech(null);
-                router.push('/home');  
+                router.push('/HomeScreen');  
               },
             },
           ]);
