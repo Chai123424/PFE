@@ -1,10 +1,10 @@
 "use client"
 
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
-import { ArrowLeft, Share2 } from "lucide-react-native"
+import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native"
+import { ArrowLeft } from "lucide-react-native"
 import { useRouter } from "expo-router"
 
-export default function DetailHeader({ title, category }) {
+export default function DetailHeader({ title, category, onSharePress }) {
   const router = useRouter()
 
   return (
@@ -13,8 +13,11 @@ export default function DetailHeader({ title, category }) {
         <ArrowLeft size={24} color="#3333CC" />
       </TouchableOpacity>
       <Text style={styles.headerTitle}>{title}</Text>
-      <TouchableOpacity style={styles.shareButton}>
-        <Share2 size={24} color="#3399FF" />
+      <TouchableOpacity style={styles.shareButton} onPress={onSharePress}>
+        <Image 
+          source={require('../assets/partager.png')}
+          style={styles.shareIconImage}
+        />
       </TouchableOpacity>
     </View>
   )
@@ -39,4 +42,9 @@ const styles = StyleSheet.create({
   shareButton: {
     padding: 8,
   },
+  shareIconImage: {
+    width: 24,
+    height: 24,
+    tintColor: "#3399FF",
+  }
 })

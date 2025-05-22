@@ -36,23 +36,23 @@ export default function DetailScreen() {
   }
 
   const handleLaunch = () => {
-    router.push('./Screens/InfoScreen')
+    router.push('/Screens/InfoScreen')
   }
 
   const handleReport = () => {
     removeAppointment(id);
-    router.replace({ pathname: '/Screens/HomeScreen', params: { category: currentAppointmentCategory } });
+    router.replace({ pathname: '/', params: { category: currentAppointmentCategory } });
   }
 
   const handleTransfer = () => {
-    router.push('./Screens/TransferScreen')
+    router.push('/Screens/TransferScreen');
   }
 
   if (!appointmentDetails[id]) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar style="auto" />
-        <DetailHeader title="Tâche" category={currentAppointmentCategory} />
+        <DetailHeader title="Tâche" category={currentAppointmentCategory} onSharePress={handleTransfer} />
         <Text style={styles.errorText}>
           Aucune information pour cette tâche (id: {id}).
         </Text>
@@ -63,7 +63,7 @@ export default function DetailScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="auto" />
-      <DetailHeader title="Tâche" onTransfer={handleTransfer} category={currentAppointmentCategory} />
+      <DetailHeader title="Tâche" onTransfer={handleTransfer} category={currentAppointmentCategory} onSharePress={handleTransfer} />
 
       <Text style={styles.appointmentName}>{appointment.name}</Text>
 
