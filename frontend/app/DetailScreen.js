@@ -45,7 +45,7 @@ export default function DetailScreen() {
   }
 
   const handleTransfer = () => {
-    router.push('/Screens/TransferScreen');
+    router.push('/Screens/TransferScreen')
   }
 
   if (!appointmentDetails[id]) {
