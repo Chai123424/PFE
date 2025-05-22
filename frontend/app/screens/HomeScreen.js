@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { View, StyleSheet, FlatList } from "react-native"
 import { StatusBar } from "expo-status-bar"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { useRouter, useLocalSearchParams } from "expo-router"
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router"
 
 import Header from "../components/Header"
 import SearchBar from "../components/SearchBar"
@@ -19,12 +19,23 @@ export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState(initialCategory || "today");
   const [filteredAppointments, setFilteredAppointments] = useState([])
 
-  useEffect(() => {
+  const updateAppointments = () => {
     setFilteredAppointments(filterAppointments(allAppointments, searchQuery, activeTab))
+  }
+
+  // Update appointments when search or tab changes
+  useEffect(() => {
+    updateAppointments()
   }, [searchQuery, activeTab])
 
+  // Update appointments when screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      updateAppointments()
+    }, [])
+  )
+
   const handleAppointmentPress = (id) => {
-    // Pass the current activeTab as a query parameter
     router.push(`/DetailScreen?id=${id}&category=${activeTab}`)
   }
 

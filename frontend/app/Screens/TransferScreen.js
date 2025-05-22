@@ -1,24 +1,20 @@
+// TransferApp.js
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  TextInput,
-  ScrollView,
-  Image,
+  View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, ScrollView, Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { Feather } from '@expo/vector-icons';
 import HeaderS from '../components/headerI';
-import { useRouter } from 'expo-router';  // <-- import useRouter
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { appointmentDetails, removeAppointment, allAppointments, filterAppointments } from "../data/appointments"
 
 const TransferApp = () => {
   const [selectedTech, setSelectedTech] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const router = useRouter();  // <-- utiliser useRouter à la place de useNavigation
+  const router = useRouter();
+  const { appointmentId } = useLocalSearchParams();
 
   const technicians = [
     { id: 1, name: 'Samir' },
@@ -36,6 +32,11 @@ const TransferApp = () => {
     tech.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleReport = (category) => {
+    removeAppointment(appointmentId);
+    router.replace({ pathname: '/', params: { category } });
+  };
+
   const handleTransfer = () => {
     if (!selectedTech) {
       Alert.alert('Erreur', 'Veuillez sélectionner un technicien');
@@ -48,16 +49,36 @@ const TransferApp = () => {
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Confirmer',
-        onPress: () => {
-          Alert.alert('Succès', `Transfert effectué vers ${techName}`, [
-            {
-              text: 'OK',
-              onPress: () => {
-                setSelectedTech(null);
-                router.push('/HomeScreen');  
-              },
-            },
-          ]);
+        onPress: async () => {
+          try {
+            
+            console.log('Suppression de l\'appointment:', appointmentId);
+            
+            // Supprimer le rendez-vous
+            const result = removeAppointment(appointmentId);
+            console.log('Résultat de la suppression:', result);
+
+            // Afficher une confirmation
+            Alert.alert('Succès', 'Rendez-vous transféré avec succès', [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Retourner à l'écran principal avec un paramètre de rafraîchissement
+                  router.replace({
+                    pathname: '/Screens/HomeScreen', // Vérifiez le bon chemin
+                    params: { 
+                      refresh: Date.now().toString(),
+                      transferred: 'true'
+                    }
+                  });
+                }
+              }
+            ]);
+
+          } catch (error) {
+            console.error('Erreur lors du transfert:', error);
+            Alert.alert('Erreur', 'Une erreur est survenue lors du transfert');
+          }
         },
       },
     ]);
@@ -74,18 +95,10 @@ const TransferApp = () => {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        <Feather
-          name="search"
-          size={18}
-          color="#49b2d7"
-          style={styles.searchIcon}
-        />
+        <Feather name="search" size={18} color="#49b2d7" style={styles.searchIcon} />
       </View>
 
-      <ScrollView
-        style={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         {filteredTechnicians.map((tech) => (
           <View key={tech.id} style={styles.techItem}>
             <Image
@@ -94,9 +107,7 @@ const TransferApp = () => {
             />
             <Text style={styles.techText}>{tech.name}</Text>
             <TouchableOpacity
-              onPress={() =>
-                setSelectedTech((prev) => (prev === tech.id ? null : tech.id))
-              }
+              onPress={() => setSelectedTech((prev) => (prev === tech.id ? null : tech.id))}
               style={styles.checkbox}
             >
               <Icon
@@ -123,19 +134,9 @@ const TransferApp = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#f8f9fa',
-  },
-  scrollContainer: {
-    flex: 1,
-    marginBottom: 10,
-  },
-  searchContainer: {
-    position: 'relative',
-    marginBottom: 12,
-  },
+  container: { flex: 1, padding: 20, backgroundColor: '#f8f9fa' },
+  scrollContainer: { flex: 1, marginBottom: 10 },
+  searchContainer: { position: 'relative', marginBottom: 12 },
   searchInput: {
     backgroundColor: '#e1f0f7',
     borderRadius: 20,
@@ -143,11 +144,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
   },
-  searchIcon: {
-    position: 'absolute',
-    right: 16,
-    top: 12,
-  },
+  searchIcon: { position: 'absolute', right: 16, top: 12 },
   techItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -162,28 +159,15 @@ const styles = StyleSheet.create({
     width: '95%',
     height: 70,
     alignSelf: 'center',
-
-    // Stronger shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 10,
   },
-  techText: {
-    fontSize: 17,
-    color: '#343a40',
-    fontWeight: '500',
-  },
-  checkbox: {
-    paddingLeft: 10,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#38a1c5',
-    marginVertical: 15,
-    opacity: 0.3,
-  },
+  techText: { fontSize: 17, color: '#343a40', fontWeight: '500' },
+  checkbox: { paddingLeft: 10 },
+  separator: { height: 1, backgroundColor: '#38a1c5', marginVertical: 15, opacity: 0.3 },
   transferButton: {
     backgroundColor: '#1f3493',
     padding: 15,
@@ -197,15 +181,8 @@ const styles = StyleSheet.create({
     width: '75%',
     alignSelf: 'center',
   },
-  disabledButton: {
-    backgroundColor: '#adb5bd',
-    shadowColor: 'transparent',
-  },
-  transferButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  disabledButton: { backgroundColor: '#adb5bd', shadowColor: 'transparent' },
+  transferButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
 });
 
 export default TransferApp;

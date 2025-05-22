@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons'; // Using Feather icons for the checkmark
 import { useRouter, useLocalSearchParams } from 'expo-router'; // Import useLocalSearchParams
-//import { removeAppointment } from '../data/appointments'; // Import removeAppointment
+import { removeAppointment } from '../data/appointments';
 
 export default function ConfirmationScreen() {
   const router = useRouter();
@@ -10,10 +10,14 @@ export default function ConfirmationScreen() {
 
   const handleOKPress = () => {
     if (id) {
-      removeAppointment(id); // Remove the appointment with the received ID
+      // Remove the appointment
+      removeAppointment(id);
+      // Navigate back to home screen
+      router.replace('/');
+    } else {
+      // If no ID is provided, just go back to home
+      router.replace('/');
     }
-    // Navigate back to the home screen
-    router.replace('/');
   };
 
   return (
@@ -53,4 +57,4 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-}); 
+});

@@ -4,13 +4,14 @@ import { useState, useEffect } from "react"
 import { StyleSheet, View, Text, TouchableOpacity, Image, SafeAreaView, StatusBar, Button, Alert } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import { Ionicons } from "@expo/vector-icons"
-import { useRouter } from "expo-router"
+import { useRouter, useLocalSearchParams } from "expo-router"
 
 export default function ProfileInfoScreen({ navigation }) {
   const [beforeImage, setBeforeImage] = useState(null)
   const [afterImage, setAfterImage] = useState(null)
-  const [activeSection, setActiveSection] = useState(null) // 'before' or 'after'
+  const [activeSection, setActiveSection] = useState(null) 
   const router = useRouter()
+  const { id } = useLocalSearchParams() // Get the appointment ID from navigation params
 
   useEffect(() => {
     ;(async () => {
@@ -120,7 +121,13 @@ export default function ProfileInfoScreen({ navigation }) {
       </View>
 
       {/* Finish Button */}
-      <TouchableOpacity style={styles.finishButton} onPress={() => router.push('ConfirmationScreen')}>
+      <TouchableOpacity 
+        style={styles.finishButton} 
+        onPress={() => router.push({
+          pathname: '/Screens/ConfirmationScreen',
+          params: { id } // Pass the appointment ID from navigation params
+        })}
+      >
         <Text style={styles.finishButtonText}>Terminé</Text>
       </TouchableOpacity>
     </SafeAreaView>

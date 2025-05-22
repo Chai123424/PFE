@@ -36,7 +36,10 @@ export default function DetailScreen() {
   }
 
   const handleLaunch = () => {
-    router.push('/Screens/InfoScreen')
+    router.push({
+      pathname: '/Screens/InfoScreen',
+      params: { id }
+    })
   }
 
   const handleReport = () => {
@@ -45,7 +48,10 @@ export default function DetailScreen() {
   }
 
   const handleTransfer = () => {
-    router.push('/Screens/TransferScreen')
+    router.push({
+      pathname: '/Screens/TransferScreen',
+      params: { appointmentId: id }
+    });
   }
 
   if (!appointmentDetails[id]) {
