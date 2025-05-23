@@ -165,6 +165,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 20,
+    width: '60%',
+    alignSelf: 'center',
   },
   loginButtonText: {
     color: '#FFFFFF',
