@@ -6,6 +6,7 @@
       "expo-sqlite"
     ],
     "name": "frontend",
-    "slug": "frontend"
+    "slug": "frontend",
+    "jsEngine": "jsc"
   }
 }
