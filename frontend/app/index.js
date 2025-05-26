@@ -18,7 +18,7 @@ export default function Index() {
   }, []);
 
   if (!ready) return <LoadingScreen />;
-  return <Redirect href={isLoggedIn ? '/loginScreen' : '/Screens/HomeScreen'} />;
+  return <Redirect href={isLoggedIn ?  '/Screens/HomeScreen' : '/loginScreen'} />;
 }
 
 

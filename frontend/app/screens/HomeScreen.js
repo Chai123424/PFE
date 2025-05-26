@@ -8,7 +8,7 @@ import Header from "../components/Header"
 import SearchBar from "../components/SearchBar"
 import AppointmentCard from "../components/AppointmentCard"
 import BottomNavigation from "../components/BottomNavigation"
-import { allAppointments, filterAppointments } from "../data/appointments"
+import { fetchOdooTasks, fetchOdooUserInfo } from '../utils/odooApi.js'
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets()
@@ -18,10 +18,83 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState(initialCategory || "today");
   const [filteredAppointments, setFilteredAppointments] = useState([])
+  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState([]);
+  const [username, setUsername] = useState("Loading...");
 
-  const updateAppointments = () => {
-    setFilteredAppointments(filterAppointments(allAppointments, searchQuery, activeTab))
+  // ADD THESE FUNCTIONS HERE - INSIDE THE COMPONENT
+  const mapOdooTaskStatus = (task) => {
+    if (task.stage_id) {
+      const stageName = task.stage_id[1];
+      if (stageName.toLowerCase().includes('done') || stageName.toLowerCase().includes('terminé')) {
+        return 'Terminé';
+      } else if (stageName.toLowerCase().includes('progress') || stageName.toLowerCase().includes('cours')) {
+        return 'En cours';
+      }
+    }
+    return 'À faire';
+  };
+
+  const transformTasksToAppointments = (tasks) => {
+    return tasks.map(task => {
+      // Extract client name (use partner_name or partner_id[1] if available)
+      const clientName = task.partner_name || (task.partner_id && task.partner_id[1]) || 'Client';
+      
+      // Keep the original reference and description
+      const referenceAndDescription = task.name || 'Unnamed Task';
+  
+      return {
+        id: task.id,
+        clientName, // Add client name as a separate field
+        referenceAndDescription, // Keep the original reference and description
+        //code: `T${task.id}`,
+        type: task.project_id ? task.project_id[1] : 'Task',
+        time: task.date_deadline ? new Date(task.date_deadline).toLocaleTimeString('fr-FR', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        }) : "--:--",
+        status: mapOdooTaskStatus(task),
+      };
+    });
+  };
+
+  // Function to fetch user info
+  const fetchUserInfo = async () => {
+    try {
+      const userInfo = await fetchOdooUserInfo();
+      if (userInfo && userInfo.name) {
+        setUsername(userInfo.name);
+      } else {
+        setUsername("User");
+      }
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+      setUsername("User");
+    }
+  };
+
+  // UPDATE THIS FUNCTION
+  const updateAppointments = async () => {
+    setLoading(true);
+    try {
+      const tasks = await fetchOdooTasks(searchQuery, activeTab);
+      console.log('Fetched tasks:', tasks); // For debugging
+      setTasks(tasks);
+      const transformedTasks = transformTasksToAppointments(tasks);
+      console.log('Transformed tasks:', transformedTasks); // For debugging
+      setFilteredAppointments(transformedTasks);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      setFilteredAppointments([]);
+    } finally {
+      setLoading(false);
+    }
   }
+
+  // Fetch user info when component mounts
+  useEffect(() => {
+    fetchUserInfo();
+  }, []);
 
   // Update appointments when search or tab changes
   useEffect(() => {
@@ -42,7 +115,7 @@ export default function HomeScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="auto" />
-      <Header username="Mohammed Tazi" showTransferIcon={false} onTransfer={null} />
+      <Header username={username} showTransferIcon={false} onTransfer={null} />
       <SearchBar onChangeText={setSearchQuery} />
 
       <FlatList
@@ -53,7 +126,7 @@ export default function HomeScreen() {
             onPress={() => handleAppointmentPress(item.id)} 
           />
         )}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContainer}
       />
 
