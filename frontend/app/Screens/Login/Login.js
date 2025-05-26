@@ -15,6 +15,43 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const authenticateOdoo = async (url, db, username, password) => {
+  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+  const payload = {
+    jsonrpc: "2.0",
+    method: "call",
+    params: {
+      service: "common",
+      method: "authenticate",
+      args: [db, username, password, {}]
+    },
+    id: Date.now()
+  };
+  console.log('Payload:', payload);
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await response.text();
+    console.log('Raw response:', text);
+    const data = JSON.parse(text);
+
+    if (data.result) {
+      console.log("Authenticated as UID:", data.result);
+      return data.result; // This is the user ID (uid)
+    } else {
+      console.log("Authentication failed.");
+      return null;
+    }
+  } catch (error) {
+    console.error("Error:", error.message);
+    return null;
+  }
+};
+
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -22,11 +59,22 @@ export default function LoginScreen() {
   const [dbName, setDbName] = useState('');
   const [url, setUrl] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleLogin = async () => {
-    // Simuler un login réussi
-    await AsyncStorage.setItem('isLoggedIn', 'true');
-    router.replace('/Screens/HomeScreen'); 
+    setErrorMessage('');
+    try {
+      const uid = await authenticateOdoo(url, dbName, email, password);
+      if (!uid) throw new Error('Invalid credentials');
+      await AsyncStorage.setItem('isLoggedIn', 'true');
+      await AsyncStorage.setItem('odoo_uid', uid.toString());
+      await AsyncStorage.setItem('user_email', email);
+      await AsyncStorage.setItem('odoo_url', url);
+      await AsyncStorage.setItem('odoo_db', dbName);
+      router.replace('/Screens/HomeScreen');
+    } catch (error) {
+      setErrorMessage(error.message || 'Login failed');
+    }
   };
 
   return (
@@ -94,6 +142,10 @@ export default function LoginScreen() {
             keyboardType="url"
           />
         </View>
+
+        {errorMessage ? (
+          <Text style={{ color: 'red', marginBottom: 10 }}>{errorMessage}</Text>
+        ) : null}
 
         <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginButtonText}>Log In</Text>
