@@ -2,35 +2,57 @@
 
 import { View, StyleSheet, TouchableOpacity, Text } from "react-native"
 import { useRouter } from "expo-router"
-import { filterAppointments } from "../data/appointments"
+import { fetchOdooTasks } from "../utils/odooApi" // Import your Odoo fetch function
+import { useEffect, useState } from "react"
 
-export default function NavigationArrows({ allAppointments, currentId, category }) {
+export default function NavigationArrows({ currentId, category }) {
   const router = useRouter()
+  const [appointments, setAppointments] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  // Filter appointments by the given category
-  const categorizedAppointments = category ? filterAppointments(allAppointments, '', category) : [];
+  // Fetch appointments from Odoo based on category
+  useEffect(() => {
+    async function loadAppointments() {
+      setLoading(true)
+      const tasks = await fetchOdooTasks("", category) // Empty search query, filter by category
+      setAppointments(tasks)
+      setLoading(false)
+    }
+    loadAppointments()
+  }, [category])
 
-  // Find the index of the current appointment in the categorized list
-  const currentIndex = categorizedAppointments.findIndex(app => app.id === currentId);
+  // Find current index in the fetched appointments
+  const currentIndex = appointments.findIndex(app => app.id === parseInt(currentId))
 
-  // Determine the previous and next appointment IDs based on the categorized list
-  const prevId = currentIndex > 0 ? categorizedAppointments[currentIndex - 1].id : null;
-  const nextId = currentIndex < categorizedAppointments.length - 1 ? categorizedAppointments[currentIndex + 1].id : null;
+  // Determine previous/next IDs
+  const prevId = currentIndex > 0 ? appointments[currentIndex - 1].id : null
+  const nextId = currentIndex < appointments.length - 1 ? appointments[currentIndex + 1].id : null
+
+  if (loading) {
+    return <View style={styles.container}><Text>Loading...</Text></View>
+  }
 
   return (
     <View style={styles.container}>
-      {/* Left slot: Previous button or placeholder */}
+      {/* Previous Button */}
       {prevId ? (
-        <TouchableOpacity onPress={() => router.push('/DetailScreen?id=' + prevId)} style={styles.arrowButton}>
+        <TouchableOpacity 
+          onPress={() => router.push(`/DetailScreen?id=${prevId}`)} 
+          style={styles.arrowButton}
+        >
           <Text style={styles.arrowText}>{"<"}</Text>
         </TouchableOpacity>
       ) : (
         <View style={styles.placeholder} />
       )}
-      {/* Right slot: Next button or placeholder */}
+
+      {/* Next Button */}
       {nextId ? (
-        <TouchableOpacity onPress={() => router.push('/DetailScreen?id=' + nextId)} style={styles.arrowButton}>
-          <Text style={styles.arrowText}>{ ">"}</Text>
+        <TouchableOpacity 
+          onPress={() => router.push(`/DetailScreen?id=${nextId}`)} 
+          style={styles.arrowButton}
+        >
+          <Text style={styles.arrowText}>{">"}</Text>
         </TouchableOpacity>
       ) : (
         <View style={styles.placeholder} />

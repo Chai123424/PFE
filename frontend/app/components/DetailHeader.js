@@ -9,9 +9,12 @@ export default function DetailHeader({ title, category, onSharePress }) {
 
   return (
     <View style={styles.header}>
-      <TouchableOpacity onPress={() => router.replace({ pathname: '/', params: { category: category } })} style={styles.backButton}>
-        <ArrowLeft size={24} color="#3333CC" />
-      </TouchableOpacity>
+       <TouchableOpacity 
+      onPress={() => router.replace({ pathname: '/', params: { category: category } })}
+      style={styles.backButton}
+    >
+      <ArrowLeft size={24} color="#3333CC" />
+    </TouchableOpacity>
       <Text style={styles.headerTitle}>{title}</Text>
       <TouchableOpacity style={styles.shareButton} onPress={onSharePress}>
         <Image 
@@ -32,7 +35,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButton: {
-    padding: 8,
+    padding: 10,
+    marginLeft: 10,
   },
   headerTitle: {
     fontSize: 18,
@@ -45,6 +49,6 @@ const styles = StyleSheet.create({
   shareIconImage: {
     width: 24,
     height: 24,
-    tintColor: "#3399FF",
+    tintColor: "#262c99",
   }
 })

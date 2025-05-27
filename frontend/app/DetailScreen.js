@@ -9,7 +9,7 @@ import DetailCard from "./components/DetailCard";
 import ActionButtons from "./components/ActionButtons";
 import NavigationArrows from "./components/NavigationArrows";
 
-import { fetchTaskById } from "./utils/odooApi"; // ta fonction API à adapter
+import { fetchTaskById } from "./utils/odooApi";
 import { removeAppointment, allAppointments } from "./data/appointments";
 
 export default function DetailScreen() {
@@ -36,7 +36,9 @@ export default function DetailScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text>Chargement...</Text>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Chargement...</Text>
+        </View>
       </View>
     );
   }
@@ -46,9 +48,11 @@ export default function DetailScreen() {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar style="auto" />
         <DetailHeader title="Tâche" category="inconnue" onSharePress={() => {}} />
-        <Text style={styles.errorText}>
-          Aucune information pour cette tâche (id: {id}).
-        </Text>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>
+            Aucune information pour cette tâche (id: {id}).
+          </Text>
+        </View>
       </View>
     );
   }
@@ -102,36 +106,76 @@ export default function DetailScreen() {
         category={currentAppointmentCategory}
         onSharePress={handleTransfer}
       />
-      <Text style={styles.appointmentName}>
-        {appointment.partner_name || "Tâche sans nom"}
-      </Text>
+      
+      <View style={styles.contentContainer}>
+        <Text style={styles.appointmentName}>
+          {appointment.partner_name || "Tâche sans nom"}
+        </Text>
 
-      <DetailCard appointment={appointment} clientInfo={null} />
+        <DetailCard appointment={appointment} clientInfo={null} />
 
-      <ActionButtons onLaunch={handleLaunch} onReport={handleReport} />
+        <ActionButtons onLaunch={handleLaunch} onReport={handleReport} />
 
-      <NavigationArrows
-        allAppointments={allAppointments}
-        currentId={id}
-        category={currentAppointmentCategory}
-      />
+        <View style={styles.navigationContainer}>
+          <NavigationArrows 
+            currentId={id} 
+            category={currentAppointmentCategory} 
+          />
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#f8f9fa" 
+  },
+  contentContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
   appointmentName: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: "#3333CC",
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#2c3e50",
     textAlign: "center",
-    marginVertical: 20,
+    marginVertical: 24,
+    paddingHorizontal: 20,
+    lineHeight: 32,
+    letterSpacing: 0.5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 18,
+    color: "#6c757d",
+    fontWeight: "500",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
   },
   errorText: {
-    color: "red",
-    margin: 20,
+    color: "#dc3545",
     fontSize: 16,
     textAlign: "center",
+    fontWeight: "500",
+    lineHeight: 24,
+    backgroundColor: "#f8d7da",
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#f5c6cb",
+  },
+  navigationContainer: {
+    marginTop: 40,
+    paddingBottom: 20,
   },
 });
