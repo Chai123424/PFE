@@ -1,5 +1,58 @@
 import { dbOperations } from './sqlite';
 
+
+
+// Fonction pour récupérer les détails du partenaire
+const fetchPartnerDetails = async (partnerId) => {
+  const uid = await dbOperations.getConfig('odoo_uid');
+  const password = await dbOperations.getConfig('odoo_password');
+  const url = await dbOperations.getConfig('odoo_url');
+  const dbName = await dbOperations.getConfig('odoo_db');
+
+  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+
+  const payload = {
+    jsonrpc: "2.0",
+    method: "call",
+    params: {
+      service: "object",
+      method: "execute",
+      args: [
+        dbName,
+        parseInt(uid),
+        password,
+        "res.partner",
+        "read",
+        [parseInt(partnerId)],
+        ["partner_name", "phone", "mobile", "street", "street2", "city", "zip", "state_id", "country_id", "email", "company_name", "parent_id", "customer_rank"]
+
+      ]
+    },
+    id: Date.now()
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    console.log('Partner details API response:', data);
+    
+    if (data.error) {
+      console.error('Partner API error:', data.error);
+      return null;
+    }
+    
+    return data.result?.[0] || null;
+  } catch (error) {
+    console.error("Erreur fetchPartnerDetails:", error);
+    return null;
+  }
+};
+
 export const fetchOdooTasks = async (searchQuery, activeTab) => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
@@ -30,7 +83,7 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
           "res.users",
           "read",
           [parseInt(uid)],
-          ["employee_id"] // Using the correct field name
+          ["employee_id"] 
         ]
       },
       id: Date.now()
@@ -58,7 +111,7 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
   // Base domain with is_stop_maintenance = false and employee_id filter
   let domain = [
     ["is_stop_maintenance", "=", false],
-    ["employee_id", "=", employeeId] // Filter by the employee
+    ["employee_id", "=", employeeId] 
   ];
   
   // Add search filter if provided
@@ -97,7 +150,7 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
         "project.task",
         "search_read",
         domain,
-        ["id", "name", "date_deadline", "partner_id","date_assign", "partner_name", "stage_id", "project_id", "is_stop_maintenance", "employee_id"] // Include employee_id in fields
+        ["id", "name", "date_deadline", "partner_id","date_assign", "partner_name", "stage_id", "project_id", "is_stop_maintenance", "employee_id","partner_phone","partner_address_complete"] // Include employee_id in fields
       ]
     },
     id: Date.now()
@@ -177,3 +230,48 @@ export const fetchOdooUserInfo = async () => {
     return null;
   }
 };
+
+
+export const fetchTaskById = async (taskId) => {
+  const uid = await dbOperations.getConfig('odoo_uid');
+  const password = await dbOperations.getConfig('odoo_password');
+  const url = await dbOperations.getConfig('odoo_url');
+  const dbName = await dbOperations.getConfig('odoo_db');
+
+  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+
+  const payload = {
+    jsonrpc: "2.0",
+    method: "call",
+    params: {
+      service: "object",
+      method: "execute",
+      args: [
+        dbName,
+        parseInt(uid),
+        password,
+        "project.task",
+        "read",
+        [parseInt(taskId)],
+        ["id", "name", "date_deadline", "employee_id", "is_stop_maintenance","partner_name","partner_id","partner_phone","partner_address_complete"] // champs à récupérer
+      ]
+    },
+    id: Date.now()
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    return data.result?.[0] || null; // on récupère la 1ère tâche
+  } catch (error) {
+    console.error("Erreur fetchTaskById:", error);
+    return null;
+  }
+};
+
+

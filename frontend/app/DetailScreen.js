@@ -1,29 +1,64 @@
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { StatusBar } from "expo-status-bar"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { View, Text, StyleSheet } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffect, useState } from "react";
 
-import DetailHeader from "./components/DetailHeader"
-import DetailCard from "./components/DetailCard"
-import ActionButtons from "./components/ActionButtons"
-import NavigationArrows from "./components/NavigationArrows"
-import { appointmentDetails, removeAppointment, allAppointments, filterAppointments } from "./data/appointments"
+import DetailHeader from "./components/DetailHeader";
+import DetailCard from "./components/DetailCard";
+import ActionButtons from "./components/ActionButtons";
+import NavigationArrows from "./components/NavigationArrows";
+
+import { fetchTaskById } from "./utils/odooApi"; // ta fonction API à adapter
+import { removeAppointment, allAppointments } from "./data/appointments";
 
 export default function DetailScreen() {
-  const { id } = useLocalSearchParams()
-  const router = useRouter()
-  const insets = useSafeAreaInsets()
+  const { id } = useLocalSearchParams();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  
+  const [appointment, setAppointment] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const appointment = appointmentDetails[id] || {}
+  useEffect(() => {
+    if (!id) return;
 
-  // Determine the category of the current appointment
-  const currentAppointment = allAppointments.find(app => app.id === id);
+    async function loadAppointment() {
+      setLoading(true);
+      const taskData = await fetchTaskById(id);
+      setAppointment(taskData);
+      setLoading(false);
+    }
+
+    loadAppointment();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Text>Chargement...</Text>
+      </View>
+    );
+  }
+
+  if (!appointment) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="auto" />
+        <DetailHeader title="Tâche" category="inconnue" onSharePress={() => {}} />
+        <Text style={styles.errorText}>
+          Aucune information pour cette tâche (id: {id}).
+        </Text>
+      </View>
+    );
+  }
+
+  // Détection de la catégorie basée sur date_deadline
   let currentAppointmentCategory = null;
-
-  if (currentAppointment) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const appointmentDate = new Date(currentAppointment.date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (appointment.date_deadline) {
+    const appointmentDate = new Date(appointment.date_deadline);
     appointmentDate.setHours(0, 0, 0, 0);
 
     if (appointmentDate.getTime() === today.getTime()) {
@@ -35,58 +70,57 @@ export default function DetailScreen() {
     }
   }
 
+  // Actions
   const handleLaunch = () => {
     router.push({
-      pathname: '/Screens/InfoScreen',
-      params: { id }
-    })
-  }
+      pathname: "/Screens/InfoScreen",
+      params: { id },
+    });
+  };
 
   const handleReport = () => {
     removeAppointment(id);
-    router.replace({ pathname: '/', params: { category: currentAppointmentCategory } });
-  }
+    router.replace({
+      pathname: "/",
+      params: { category: currentAppointmentCategory },
+    });
+  };
 
   const handleTransfer = () => {
     router.push({
-      pathname: '/Screens/TransferScreen',
-      params: { appointmentId: id }
+      pathname: "/Screens/TransferScreen",
+      params: { appointmentId: id },
     });
-  }
-
-  if (!appointmentDetails[id]) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar style="auto" />
-        <DetailHeader title="Tâche" category={currentAppointmentCategory} onSharePress={handleTransfer} />
-        <Text style={styles.errorText}>
-          Aucune information pour cette tâche (id: {id}).
-        </Text>
-      </View>
-    )
-  }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="auto" />
-      <DetailHeader title="Tâche" onTransfer={handleTransfer} category={currentAppointmentCategory} onSharePress={handleTransfer} />
+      <DetailHeader
+        title="Tâche"
+        onTransfer={handleTransfer}
+        category={currentAppointmentCategory}
+        onSharePress={handleTransfer}
+      />
+      <Text style={styles.appointmentName}>
+        {appointment.partner_name || "Tâche sans nom"}
+      </Text>
 
-      <Text style={styles.appointmentName}>{appointment.name}</Text>
-
-      <DetailCard appointment={appointment} />
+      <DetailCard appointment={appointment} clientInfo={null} />
 
       <ActionButtons onLaunch={handleLaunch} onReport={handleReport} />
 
-      <NavigationArrows allAppointments={allAppointments} currentId={id} category={currentAppointmentCategory} />
+      <NavigationArrows
+        allAppointments={allAppointments}
+        currentId={id}
+        category={currentAppointmentCategory}
+      />
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
+  container: { flex: 1, backgroundColor: "#fff" },
   appointmentName: {
     fontSize: 24,
     fontWeight: "600",
@@ -94,23 +128,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginVertical: 20,
   },
-  backButton: {
-    marginTop: 16,
-    marginLeft: 16,
-    marginBottom: 8,
-    alignSelf: "flex-start",
-    backgroundColor: "#52AFD4",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  backButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
   errorText: {
-    color: 'red',
+    color: "red",
     margin: 20,
-  }
-})
+    fontSize: 16,
+    textAlign: "center",
+  },
+});

@@ -37,25 +37,22 @@ export default function HomeScreen() {
 
   const transformTasksToAppointments = (tasks) => {
     return tasks.map(task => {
-      // Extract client name (use partner_name or partner_id[1] if available)
-      const clientName = task.partner_name || (task.partner_id && task.partner_id[1]) || 'Client';
-      
-      // Keep the original reference and description
-      const referenceAndDescription = task.name || 'Unnamed Task';
-  
-      return {
-        id: task.id,
-        clientName, // Add client name as a separate field
-        referenceAndDescription, // Keep the original reference and description
-        //code: `T${task.id}`,
-        type: task.project_id ? task.project_id[1] : 'Task',
-        time: task.date_deadline ? new Date(task.date_deadline).toLocaleTimeString('fr-FR', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        }) : "--:--",
-        status: mapOdooTaskStatus(task),
-      };
-    });
+  const clientName = task.partner_name || (task.partner_id && task.partner_id[1]) || 'Client';
+  const clientId = task.partner_id?.[0]; // ID du client
+
+  return {
+    id: task.id,
+    clientId, // 👈 Ajoute ceci
+    clientName,
+    referenceAndDescription: task.name || 'Unnamed Task',
+    type: task.project_id ? task.project_id[1] : 'Task',
+    time: task.date_deadline
+      ? new Date(task.date_deadline).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      : "--:--",
+    status: mapOdooTaskStatus(task),
+  };
+});
+
   };
 
   // Function to fetch user info
@@ -108,9 +105,12 @@ export default function HomeScreen() {
     }, [])
   )
 
-  const handleAppointmentPress = (id) => {
-    router.push(`/DetailScreen?id=${id}&category=${activeTab}`)
-  }
+  const handleAppointmentPress = (id, clientId) => {
+  router.push(`/DetailScreen?id=${id}&clientId=${clientId}&category=${activeTab}`);
+};
+
+
+  
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -123,8 +123,9 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <AppointmentCard 
             appointment={item} 
-            onPress={() => handleAppointmentPress(item.id)} 
+            onPress={() => handleAppointmentPress(item.id, item.clientId)} 
           />
+
         )}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContainer}
