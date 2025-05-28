@@ -68,3 +68,34 @@ export default function AppointmentDetails({ appointment }) {
     <DetailCard appointment={appointment} partner={partner} />
   );
 }
+
+export const removeAppointment = (appointments, appointmentId, currentEmployeeId) => {
+  try {
+    const initialLength = appointments.length;
+
+    const filteredAppointments = appointments.filter(appointment => {
+      if (appointment.id !== appointmentId) return true;
+
+      // Ne supprime que si employeeId différent
+      if (appointment.employeeId === currentEmployeeId) {
+        return true; // Garde l'appointment
+      }
+      return false; // Supprime l'appointment
+    });
+
+    const removed = initialLength > filteredAppointments.length;
+    console.log(`Appointment ${appointmentId} ${removed ? 'supprimé' : 'non supprimé (même employé)'}`);
+
+    return {
+      success: removed,
+      appointments: filteredAppointments,
+      message: removed ? 'Appointment supprimé avec succès' : 'Suppression annulée : même employé'
+    };
+  } catch (error) {
+    console.error('Erreur lors de la suppression:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};

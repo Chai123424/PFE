@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons'; // Using Feather icons for the checkmark
-import { useRouter, useLocalSearchParams } from 'expo-router'; // Import useLocalSearchParams
+import { Feather } from '@expo/vector-icons'; 
+import { useRouter, useLocalSearchParams } from 'expo-router'; 
 import { removeAppointment } from '../data/appointments';
 
 export default function ConfirmationScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams(); // Get the appointment ID from URL parameters
+  const { id } = useLocalSearchParams(); 
 
   const handleOKPress = () => {
     if (id) {
@@ -15,7 +15,7 @@ export default function ConfirmationScreen() {
       // Navigate back to home screen
       router.replace('/');
     } else {
-      // If no ID is provided, just go back to home
+      
       router.replace('/');
     }
   };
@@ -33,7 +33,7 @@ export default function ConfirmationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#4CBEE3', // A shade of blue similar to the image
+    backgroundColor: '#4CBEE3', 
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -46,8 +46,8 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     paddingVertical: 15,
     paddingHorizontal: 60,
-    elevation: 5, // Add shadow for Android
-    shadowColor: '#000', // Add shadow for iOS
+    elevation: 5, 
+    shadowColor: '#000', 
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,

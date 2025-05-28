@@ -8,18 +8,16 @@ import DetailHeader from "./components/DetailHeader";
 import DetailCard from "./components/DetailCard";
 import ActionButtons from "./components/ActionButtons";
 import NavigationArrows from "./components/NavigationArrows";
-
-import { fetchTaskById } from "./utils/odooApi"; // ta fonction API à adapter
+import { fetchTaskById } from "./utils/odooApi"; 
 import { removeAppointment, allAppointments } from "./data/appointments";
 
 export default function DetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
   const [appointment, setAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
-
+ 
   useEffect(() => {
     if (!id) return;
 
@@ -53,7 +51,6 @@ export default function DetailScreen() {
     );
   }
 
-  // Détection de la catégorie basée sur date_deadline
   let currentAppointmentCategory = null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -70,7 +67,6 @@ export default function DetailScreen() {
     }
   }
 
-  // Actions
   const handleLaunch = () => {
     router.push({
       pathname: "/Screens/InfoScreen",

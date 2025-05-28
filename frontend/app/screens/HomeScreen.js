@@ -21,6 +21,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
   const [username, setUsername] = useState("Loading...");
+  const [userId, setUserId] = useState(null);
 
   // ADD THESE FUNCTIONS HERE - INSIDE THE COMPONENT
   const mapOdooTaskStatus = (task) => {
@@ -38,11 +39,11 @@ export default function HomeScreen() {
   const transformTasksToAppointments = (tasks) => {
     return tasks.map(task => {
   const clientName = task.partner_name || (task.partner_id && task.partner_id[1]) || 'Client';
-  const clientId = task.partner_id?.[0]; // ID du client
+  const clientId = task.partner_id?.[0]; 
 
   return {
     id: task.id,
-    clientId, // 👈 Ajoute ceci
+    clientId, 
     clientName,
     referenceAndDescription: task.name || 'Unnamed Task',
     type: task.project_id ? task.project_id[1] : 'Task',
@@ -61,6 +62,7 @@ export default function HomeScreen() {
       const userInfo = await fetchOdooUserInfo();
       if (userInfo && userInfo.name) {
         setUsername(userInfo.name);
+        setUserId(userInfo.id); 
       } else {
         setUsername("User");
       }
@@ -75,7 +77,8 @@ export default function HomeScreen() {
     setLoading(true);
     try {
       const tasks = await fetchOdooTasks(searchQuery, activeTab);
-      console.log('Fetched tasks:', tasks); // For debugging
+      console.log('Fetched tasks:', tasks);
+      const myTasks = tasks.filter(task => task.user_id?.[0] === userId);
       setTasks(tasks);
       const transformedTasks = transformTasksToAppointments(tasks);
       console.log('Transformed tasks:', transformedTasks); // For debugging
@@ -88,22 +91,25 @@ export default function HomeScreen() {
     }
   }
 
-  // Fetch user info when component mounts
+  
   useEffect(() => {
     fetchUserInfo();
   }, []);
 
-  // Update appointments when search or tab changes
   useEffect(() => {
-    updateAppointments()
-  }, [searchQuery, activeTab])
+    if (userId !== null) {
+      updateAppointments();
+    }
+  }, [searchQuery, activeTab, userId]);
 
-  // Update appointments when screen is focused
+  
   useFocusEffect(
     React.useCallback(() => {
-      updateAppointments()
-    }, [])
-  )
+      if (userId !== null) {
+        updateAppointments();
+      }
+    }, [userId])
+  );
 
   const handleAppointmentPress = (id, clientId) => {
   router.push(`/DetailScreen?id=${id}&clientId=${clientId}&category=${activeTab}`);
