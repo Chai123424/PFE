@@ -97,6 +97,9 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     const userData = await userResponse.json();
     if (userData.result && userData.result[0] && userData.result[0].employee_id) {
       employeeId = userData.result[0].employee_id[0]; // [id, name] format for many2one
+      console.log('Found employee ID:', employeeId);
+    } else {
+      console.log('No employee ID found in user data:', userData);
     }
   } catch (e) {
     console.error('Failed to fetch employee ID:', e);
@@ -107,10 +110,11 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     return [];
   }
 
-  // Base domain with is_stop_maintenance = false and employee_id filter
+  // Base domain filters
   let domain = [
     ["is_stop_maintenance", "=", false],
-    ["employee_id", "=", employeeId] 
+    ["employee_id", "=", employeeId],
+    ["active", "=", true] // Added active filter to exclude archived tasks
   ];
   
   // Add search filter if provided
@@ -120,6 +124,7 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
   
   // Date filters based on active tab
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString().split('T')[0];
   
   if (activeTab === 'today') {
@@ -131,9 +136,7 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     domain.push(['date_deadline', '<', todayStr]);
   }
 
-  console.log('Search domain:', domain);
-  console.log('Active tab:', activeTab);
-  console.log('Employee ID:', employeeId);
+  console.log('Final search domain:', JSON.stringify(domain, null, 2));
 
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
   const payload = {
@@ -149,7 +152,12 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
         "project.task",
         "search_read",
         domain,
-        ["id", "name", "date_deadline", "partner_id","date_assign", "partner_name", "stage_id", "project_id", "is_stop_maintenance", "employee_id","partner_phone","partner_address_complete"] // Include employee_id in fields
+        [
+          "id", "name", "date_deadline", "partner_id", "date_assign", 
+          "partner_name", "stage_id", "project_id", "is_stop_maintenance", 
+          "employee_id", "partner_phone", "partner_address_complete",
+          "state"
+        ]
       ]
     },
     id: Date.now()
@@ -173,21 +181,36 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     }
     
     const result = data.result || [];
-    console.log('Fetched tasks count:', result.length);
-    console.log('Sample task:', result[0]);
+    console.log('Raw tasks from API:', result);
     
-    // Additional client-side filtering
-    return result.filter(task => 
-      task.is_stop_maintenance === false && 
-      task.employee_id && 
-      task.employee_id[0] === employeeId
-    );
+    // Enhanced client-side filtering with debugging
+    const filteredTasks = result.filter(task => {
+      const isStopMaintenanceValid = task.is_stop_maintenance === false;
+      const isEmployeeValid = task.employee_id && task.employee_id[0] === employeeId;
+      const isActiveValid = task.active !== false;
+      
+      if (!isStopMaintenanceValid) {
+        console.log(`Task ${task.id} filtered out due to is_stop_maintenance:`, task.is_stop_maintenance);
+      }
+      if (!isEmployeeValid) {
+        console.log(`Task ${task.id} filtered out due to employee mismatch:`, task.employee_id);
+      }
+      if (!isActiveValid) {
+        console.log(`Task ${task.id} filtered out due to inactive status`);
+      }
+      
+      return isStopMaintenanceValid && isEmployeeValid && isActiveValid;
+    });
+    
+    console.log('Filtered tasks count:', filteredTasks.length);
+    console.log('Sample filtered task:', filteredTasks[0]);
+    
+    return filteredTasks;
   } catch (e) {
     console.error('Failed to fetch tasks from Odoo:', e);
     return [];
   }
 };
-
 export const fetchOdooUserInfo = async () => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');

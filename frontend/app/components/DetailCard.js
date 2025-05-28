@@ -1,8 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 
-
-
 // Fonction utilitaire pour extraire la valeur d'un champ Odoo
 const getOdooValue = (field) => {
   if (!field) return "N/A";
@@ -55,10 +53,7 @@ export default function DetailCard({ appointment, partner }) {
     );
   }
 
-  
-
   return (
-    
     <View style={styles.detailsCard}>
       {/* Numéro - nom ou ID appointment */}
       <View style={styles.detailRow}>
@@ -67,7 +62,6 @@ export default function DetailCard({ appointment, partner }) {
           {getOdooValue(appointment.name) || `T${appointment.id}` || "N/A"}
         </Text>
       </View>
-
 
       {/* Adresse partenaire */}
       <View style={styles.detailRow}>
@@ -100,37 +94,36 @@ export default function DetailCard({ appointment, partner }) {
 const styles = StyleSheet.create({
   detailsCard: {
     backgroundColor: "#e6f2f7",
-    borderRadius: 16,
-    padding: 30,
+    borderRadius: 12,
+    padding: 16, // Reduced from 30
     marginHorizontal: 20,
   },
   detailRow: {
-    flexDirection: "row",
-    marginBottom: 12,
-    flexWrap: "wrap",
+    flexDirection: "column",
+    marginBottom: 10, // Reduced from 16
   },
   detailLabel: {
-    fontSize: 20,
+    fontSize: 14, // Reduced from 16
     fontWeight: "600",
-    marginRight: 8,
+    marginBottom: 2, // Reduced from 4
     color: "#333",
   },
   detailValue: {
-    fontSize: 18,
-    flexShrink: 1,
+    fontSize: 14, // Reduced from 16
     color: "#666",
+    marginBottom: 4, // Reduced from 8
   },
   errorCard: {
     backgroundColor: "#ffebee",
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 12,
+    padding: 16, // Reduced from 20
     marginHorizontal: 20,
     borderColor: "#f44336",
     borderWidth: 1,
   },
   errorText: {
     color: "#f44336",
-    fontSize: 16,
+    fontSize: 14, // Reduced from 16
     textAlign: "center",
   },
 });

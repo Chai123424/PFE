@@ -46,9 +46,9 @@ export default function AppointmentCard({ appointment, onPress }) {
           {appointment.referenceAndDescription || appointment.partner_name || " "}
         </Text>
         
-        {/* Only show the assignment date */}
+        {/* CHANGÉ: Utilise date_deadline au lieu de date_assign */}
         <Text style={styles.dateText}>
-          Assigné le: {formatDate(appointment.date_assign)}
+          Date Limite: {formatDate(appointment.date_deadline)}
         </Text>
       </View>
       
