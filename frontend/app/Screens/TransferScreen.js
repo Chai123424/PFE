@@ -1,39 +1,44 @@
-// TransferApp.js
 import React, { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, ScrollView, Image,
+  View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
-import { Feather } from '@expo/vector-icons';
 import HeaderS from '../components/headerI';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { appointmentDetails, removeAppointment, allAppointments, filterAppointments } from "../data/appointments"
-import { transferAppointmentToTechnician, fetchTechniciansById, fetchOdooTasks } from '../utils/odooApi';
+import { callOdooActionChangeSingleTechnician, fetchTechniciansById } from '../utils/odooApi';
 import { useEffect } from 'react';
-import { callOdooActionChangeSingleTechnician } from '../utils/odooApi';
 
 const TransferApp = () => {
   const [selectedTech, setSelectedTech] = useState(null);
   const [technicians, setTechnicians] = useState([]);
   const [currentTechnician, setCurrentTechnician] = useState(null);
-  const [appointments, setAppointments] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const { taskId } = useLocalSearchParams()
+  const params = useLocalSearchParams();
+  const taskId = params.taskId || params.appointmentId || params.id;
   const router = useRouter();
-  const { appointmentId } = useLocalSearchParams();
+
+  useEffect(() => {
+    console.log('TransferApp params:', params);
+    console.log('TransferApp taskId:', taskId);
+    
+    if (!taskId) {
+      console.error('No taskId found in params');
+      Alert.alert(
+        'Erreur',
+        'ID de tâche manquant. Impossible de continuer.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      return;
+    }
+  }, [params, taskId]);
 
   useEffect(() => {
     const loadTechnicians = async () => {
       setLoading(true);
       try {
-        
         const result = await fetchTechniciansById();
         setTechnicians(result.availableTechnicians);
         setCurrentTechnician(result.currentTechnician);
-        
-        console.log('Technicien actuel:', result.currentTechnician);
-        console.log('Techniciens disponibles:', result.availableTechnicians);
       } catch (error) {
         console.error('Erreur chargement techniciens :', error);
         Alert.alert('Erreur', 'Impossible de charger la liste des techniciens');
@@ -41,79 +46,88 @@ const TransferApp = () => {
       setLoading(false);
     };
 
-    loadTechnicians();
-  }, []);
- 
-  const filteredTechnicians = (technicians || []).filter((tech) =>
-    tech.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    if (taskId) {
+      loadTechnicians();
+    }
+  }, [taskId]);
 
-  const handleTransfer = () => {
+  const handleTransfer = async () => {
+    if (!taskId) {
+      Alert.alert('Erreur', 'ID de tâche manquant');
+      return;
+    }
+
     if (!selectedTech) {
       Alert.alert('Erreur', 'Veuillez sélectionner un technicien');
       return;
     }
-
+  
     const techName = technicians.find((t) => t.id === selectedTech)?.name;
-    console.log('=== DEBUT TRANSFERT ===');
-    console.log('appointmentId:', appointmentId, 'type:', typeof appointmentId);
-    console.log('selectedTech:', selectedTech, 'type:', typeof selectedTech);
-    console.log('techName:', techName);
-
-    Alert.alert('Confirmer transfert', `Transférer à : ${techName} ?`, [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Confirmer',
-        onPress: async () => {
-          setLoading(true);
-          try {
-            console.log('Appel API en cours...');
-            const result = await callOdooActionChangeSingleTechnician(appointmentId, selectedTech);
-            console.log('Résultat API:', result);
-
-            // Supprimer localement l'appointment si employeeId différent
-            const removeResult = removeAppointment(
-              appointments,
-              Number(appointmentId),
-              currentTechnician?.id
-            );
-            console.log('Résultat removeAppointment:', removeResult);
-
-            if (removeResult.success) {
-              setAppointments(removeResult.appointments);
+    
+    Alert.alert(
+      'Confirmer transfert', 
+      `Définir ${techName} comme technicien secondaire ?\n\n(Le technicien principal reste ${currentTechnician?.name})`, 
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Confirmer',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const result = await callOdooActionChangeSingleTechnician(taskId, selectedTech);
+              
+              if (result.success) {
+                Alert.alert(
+                  'Succès', 
+                  result.message || 'Technicien secondaire modifié avec succès',
+                  [{
+                    text: 'OK',
+                    onPress: () => router.replace({
+                      pathname: '/Screens/HomeScreen',
+                      params: {
+                        refresh: Date.now().toString(),
+                        transferredTaskId: taskId,
+                        newSecondaryTech: selectedTech
+                      },
+                    }),
+                  }]
+                );
+              } else {
+                Alert.alert('Erreur', result.error || 'Échec du transfert');
+              }
+            } catch (error) {
+              console.error('Transfer error:', error);
+              Alert.alert('Erreur', `Une erreur est survenue: ${error.message}`);
+            } finally {
+              setLoading(false);
             }
-
-            Alert.alert('Succès', removeResult.message, [
-              {
-                text: 'OK',
-                onPress: () => {
-                  router.replace({
-                    pathname: '/Screens/HomeScreen',
-                    params: {
-                      refresh: Date.now().toString(),
-                      transferred: 'true',
-                    },
-                  });
-                },
-              },
-            ]);
-          } catch (error) {
-            console.error('=== ERREUR TRANSFERT ===');
-            console.error('Error details:', error);
-            console.error('Error message:', error.message);
-            Alert.alert('Erreur', 'Une erreur est survenue lors du transfert: ' + error.message);
-          } finally {
-            setLoading(false);
-          }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
+  
+  if (!taskId) {
+    return (
+      <View style={styles.container}>
+        <HeaderS />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>ID de tâche manquant</Text>
+          <TouchableOpacity 
+            style={styles.transferButton} 
+            onPress={() => router.back()}
+          >
+            <Text style={styles.transferButtonText}>Retour</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+  
   return (
     <View style={styles.container}>
       <HeaderS />
 
-      {/* Current Technician Info */}
       {currentTechnician && (
         <View style={styles.currentTechContainer}>
           <Text style={styles.currentTechLabel}>Technicien actuel :</Text>
@@ -129,23 +143,13 @@ const TransferApp = () => {
 
       <Text style={styles.sectionTitle}>Transférer vers :</Text>
 
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Rechercher un technicien"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        <Feather name="search" size={18} color="#49b2d7" style={styles.searchIcon} />
-      </View>
-
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         {loading ? (
           <Text style={styles.loadingText}>Chargement des techniciens...</Text>
-        ) : filteredTechnicians.length === 0 ? (
+        ) : technicians.length === 0 ? (
           <Text style={styles.noDataText}>Aucun technicien trouvé</Text>
         ) : (
-          filteredTechnicians.map((tech) => (
+          technicians.map((tech) => (
             <View key={tech.id} style={styles.techItem}>
               <Image
                 source={require('../assets/anonyme.png')}
@@ -184,6 +188,18 @@ const TransferApp = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: '#f8f9fa' },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#dc3545',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
   currentTechContainer: {
     backgroundColor: '#e8f4f8',
     borderRadius: 12,
@@ -215,15 +231,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   scrollContainer: { flex: 1, marginBottom: 10 },
-  searchContainer: { position: 'relative', marginBottom: 12 },
-  searchInput: {
-    backgroundColor: '#e1f0f7',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  searchIcon: { position: 'absolute', right: 16, top: 12 },
   techItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',

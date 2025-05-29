@@ -110,11 +110,17 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     return [];
   }
 
-  // Base domain filters
+  // Base domain filters with the new logic for employee assignment
   let domain = [
     ["is_stop_maintenance", "=", false],
+    ["active", "=", true], // Active filter to exclude archived tasks
+    "|", // OR operator for the two employee conditions
+    "&", // AND operator for first condition
     ["employee_id", "=", employeeId],
-    ["active", "=", true] // Added active filter to exclude archived tasks
+    ["change_technician", "=", false],
+    "&", // AND operator for second condition  
+    ["employee2_id", "=", employeeId],
+    ["change_technician", "=", true]
   ];
   
   // Add search filter if provided
@@ -155,8 +161,8 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
         [
           "id", "name", "date_deadline", "partner_id", "date_assign", 
           "partner_name", "stage_id", "project_id", "is_stop_maintenance", 
-          "employee_id", "partner_phone", "partner_address_complete",
-          "state"
+          "employee_id", "employee2_id", "change_technician", "partner_phone", 
+          "partner_address_complete", "state", "timer_state"
         ]
       ]
     },
@@ -183,17 +189,34 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     const result = data.result || [];
     console.log('Raw tasks from API:', result);
     
-    // Enhanced client-side filtering with debugging
+    // Enhanced client-side filtering with debugging for the new logic
     const filteredTasks = result.filter(task => {
       const isStopMaintenanceValid = task.is_stop_maintenance === false;
-      const isEmployeeValid = task.employee_id && task.employee_id[0] === employeeId;
       const isActiveValid = task.active !== false;
+      
+      // New employee assignment logic
+      const isEmployeeCondition1 = task.employee_id && 
+                                  task.employee_id[0] === employeeId && 
+                                  task.change_technician === false;
+      
+      const isEmployeeCondition2 = task.employee2_id && 
+                                  task.employee2_id[0] === employeeId && 
+                                  task.change_technician === true;
+      
+      const isEmployeeValid = isEmployeeCondition1 || isEmployeeCondition2;
       
       if (!isStopMaintenanceValid) {
         console.log(`Task ${task.id} filtered out due to is_stop_maintenance:`, task.is_stop_maintenance);
       }
       if (!isEmployeeValid) {
-        console.log(`Task ${task.id} filtered out due to employee mismatch:`, task.employee_id);
+        console.log(`Task ${task.id} filtered out due to employee assignment:`, {
+          employee_id: task.employee_id,
+          employee2_id: task.employee2_id,
+          change_technician: task.change_technician,
+          currentEmployeeId: employeeId,
+          condition1Valid: isEmployeeCondition1,
+          condition2Valid: isEmployeeCondition2
+        });
       }
       if (!isActiveValid) {
         console.log(`Task ${task.id} filtered out due to inactive status`);
@@ -211,6 +234,7 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     return [];
   }
 };
+
 export const fetchOdooUserInfo = async () => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
@@ -253,7 +277,6 @@ export const fetchOdooUserInfo = async () => {
   }
 };
 
-
 export const fetchTaskById = async (taskId) => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
@@ -275,7 +298,7 @@ export const fetchTaskById = async (taskId) => {
         "project.task",
         "read",
         [parseInt(taskId)],
-        ["id", "name", "date_deadline", "employee_id", "is_stop_maintenance","partner_name","partner_id","partner_phone","partner_address_complete"] 
+        ["id", "name", "date_deadline", "employee_id", "is_stop_maintenance","partner_name","partner_id","partner_phone","partner_address_complete" , "timer_state"] 
       ]
     },
     id: Date.now()
@@ -293,57 +316,6 @@ export const fetchTaskById = async (taskId) => {
   } catch (error) {
     console.error("Erreur fetchTaskById:", error);
     return null;
-  }
-};
-
-
-export const transferAppointmentToTechnician = async (taskId, technicianUserId) => {
-  if (!technicianUserId || isNaN(parseInt(technicianUserId))) {
-    throw new Error("technicianEmployeeId invalide ou manquant");
-  }
-  const uid = await dbOperations.getConfig('odoo_uid');
-  const password = await dbOperations.getConfig('odoo_password');
-  const url = await dbOperations.getConfig('odoo_url');
-  const dbName = await dbOperations.getConfig('odoo_db');
-
-  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
-
-  const payload = {
-    jsonrpc: "2.0",
-    method: "call",
-    params: {
-      service: "object",
-      method: "execute",
-      args: [
-        dbName,
-        parseInt(uid),
-        password,
-        "project.task",
-        "write",
-         [parseInt(taskId)],
-        { user_id: parseInt(technicianUserId) }
-      ]
-    },
-    id: Date.now()
-  };
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-    if (data.error) {
-      console.error("Erreur complète Odoo:", data.error);
-      throw new Error(data.error.message || 'Transfer failed');
-    }
-
-    return { success: true, result: data.result };
-  } catch (error) {
-    console.error("Erreur lors du transfert Odoo:", error);
-    throw error;
   }
 };
 
@@ -442,7 +414,7 @@ export const fetchTechniciansById = async () => {
           "hr.employee",
           "search_read",
           [
-            ['job_title', '=', 'Technicien'] // Exact match for "Technicien" only
+            ['job_title', '=', 'Technicien'] 
           ], 
           ['id', 'name', 'job_title', 'user_id'] 
         ]
@@ -481,74 +453,17 @@ export const fetchTechniciansById = async () => {
   }
 };
 
-// Fonction pour appeler la méthode Odoo action_change_technician
-export const callOdooActionChangeTechnician = async (taskId, primaryTechnicianId, secondaryTechnicianId = null) => {
+// NEW: Report task function
+export const reportTask = async (taskId, description = "") => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
   const url = await dbOperations.getConfig('odoo_url');
   const dbName = await dbOperations.getConfig('odoo_db');
 
-  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
-
-  // Préparer les paramètres pour la méthode Odoo
-  const methodParams = {
-    technician_id: primaryTechnicianId ? parseInt(primaryTechnicianId) : null,
-    secondary_technician_id: secondaryTechnicianId ? parseInt(secondaryTechnicianId) : null
-  };
-
-  const payload = {
-    jsonrpc: "2.0",
-    method: "call",
-    params: {
-      service: "object",
-      method: "execute",
-      args: [
-        dbName,
-        parseInt(uid),
-        password,
-        "project.task",  // Modèle où se trouve votre méthode
-        "action_change_technician",  // Nom de votre méthode Odoo
-        [parseInt(taskId)],  // ID de la tâche
-        methodParams  // Paramètres de la méthode
-      ]
-    },
-    id: Date.now()
-  };
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-    
-    if (data.error) {
-      console.error('Odoo API error:', data.error);
-      throw new Error(data.error.message || 'Action change technician failed');
-    }
-    
-    console.log('Résultat de action_change_technician:', data.result);
-    
-    return {
-      success: true,
-      result: data.result,
-      primaryTechnicianId,
-      secondaryTechnicianId
-    };
-  } catch (error) {
-    console.error("Erreur lors de l'appel à action_change_technician:", error);
-    throw error;
+  if (!uid || !password || !url || !dbName) {
+    console.log('Missing Odoo configuration');
+    return { success: false, error: "Configuration Odoo manquante" };
   }
-};
-
-// Alternative si la méthode attend les paramètres différemment
-export const callOdooActionChangeTechnicianAlt = async (taskId, primaryTechnicianId, secondaryTechnicianId = null) => {
-  const uid = await dbOperations.getConfig('odoo_uid');
-  const password = await dbOperations.getConfig('odoo_password');
-  const url = await dbOperations.getConfig('odoo_url');
-  const dbName = await dbOperations.getConfig('odoo_db');
 
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
 
@@ -563,10 +478,9 @@ export const callOdooActionChangeTechnicianAlt = async (taskId, primaryTechnicia
         parseInt(uid),
         password,
         "project.task",
-        "action_change_technician",
-        [parseInt(taskId)],  // IDs des enregistrements
-        parseInt(primaryTechnicianId),  // Premier paramètre
-        secondaryTechnicianId ? parseInt(secondaryTechnicianId) : false  // Deuxième paramètre
+        "reported_pool_maintenance_api",
+        parseInt(taskId),
+        description
       ]
     },
     id: Date.now()
@@ -580,35 +494,83 @@ export const callOdooActionChangeTechnicianAlt = async (taskId, primaryTechnicia
     });
 
     const data = await response.json();
+    console.log('Report task API response:', data);
     
     if (data.error) {
-      console.error('Odoo API error:', data.error);
-      throw new Error(data.error.message || 'Action change technician failed');
+      console.error('Report task API error:', data.error);
+      return { success: false, error: data.error };
     }
     
-    return {
-      success: true,
-      result: data.result,
-      primaryTechnicianId,
-      secondaryTechnicianId
-    };
+    // The backend method returns the result directly
+    return data.result || { success: false, error: "Réponse inattendue du serveur" };
   } catch (error) {
-    console.error("Erreur lors de l'appel à action_change_technician:", error);
-    throw error;
+    console.error("Erreur reportTask:", error);
+    return { success: false, error: "Erreur de connexion" };
   }
 };
 
-// Version pour un seul technicien (si la méthode ne prend qu'un paramètre)
 export const callOdooActionChangeSingleTechnician = async (taskId, technicianId) => {
-  console.log('=== API CALL ===');
-  console.log('taskId:', taskId, 'technicianId:', technicianId);
-  
+  console.log('[Technician Change] Starting process...', { taskId, technicianId });
+
+  // Enhanced validation with better error messages
+  if (!taskId || taskId === 'undefined' || taskId === 'null') {
+    console.error('[Technician Change] taskId is invalid:', { taskId, type: typeof taskId });
+    return { success: false, error: "ID de tâche requis et valide" };
+  }
+
+  if (!technicianId || technicianId === 'undefined' || technicianId === 'null') {
+    console.error('[Technician Change] technicianId is invalid:', { technicianId, type: typeof technicianId });
+    return { success: false, error: "ID technicien requis et valide" };
+  }
+
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
   const url = await dbOperations.getConfig('odoo_url');
   const dbName = await dbOperations.getConfig('odoo_db');
 
+  if (!uid || !password || !url || !dbName) {
+    console.error('[Technician Change] Missing Odoo configuration:', {
+      hasUid: !!uid,
+      hasPassword: !!password,
+      hasUrl: !!url,
+      hasDbName: !!dbName
+    });
+    return { success: false, error: "Configuration Odoo manquante" };
+  }
+
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+  console.log('[Technician Change] Using endpoint:', endpoint);
+  
+  // More robust parsing with better validation
+  let parsedTaskId, parsedTechnicianId;
+  
+  try {
+    // Handle string numbers and actual numbers
+    parsedTaskId = typeof taskId === 'string' ? parseInt(taskId.trim()) : parseInt(taskId);
+    parsedTechnicianId = typeof technicianId === 'string' ? parseInt(technicianId.trim()) : parseInt(technicianId);
+    
+    if (isNaN(parsedTaskId) || parsedTaskId <= 0) {
+      throw new Error(`Invalid taskId: ${taskId} -> ${parsedTaskId}`);
+    }
+    
+    if (isNaN(parsedTechnicianId) || parsedTechnicianId <= 0) {
+      throw new Error(`Invalid technicianId: ${technicianId} -> ${parsedTechnicianId}`);
+    }
+    
+  } catch (parseError) {
+    console.error('[Technician Change] ID parsing error:', parseError);
+    return { 
+      success: false, 
+      error: `IDs invalides: ${parseError.message}` 
+    };
+  }
+
+  console.log('[Technician Change] Parsed IDs:', {
+    originalTaskId: taskId,
+    parsedTaskId,
+    originalTechnicianId: technicianId,
+    parsedTechnicianId
+  });
 
   const payload = {
     jsonrpc: "2.0",
@@ -622,43 +584,85 @@ export const callOdooActionChangeSingleTechnician = async (taskId, technicianId)
         password,
         "project.task",
         "action_change_technician",
-        [parseInt(taskId)],  
-        parseInt(technicianId)
+        parsedTaskId,
+        parsedTechnicianId
       ]
     },
     id: Date.now()
   };
 
-  console.log('Payload:', JSON.stringify(payload, null, 2));
+  console.log('[Technician Change] Full payload:', JSON.stringify(payload, null, 2));
 
   try {
+    console.log('[Technician Change] Sending request to Odoo...');
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
-    console.log('Response status:', response.status);
-    const data = await response.json();
-    console.log('Response data:', JSON.stringify(data, null, 2));
-    
-    if (data.error) {
-      console.error('Odoo API error:', data.error);
-      throw new Error(data.error.message || 'Action change technician failed');
+    if (!response.ok) {
+      console.error('[Technician Change] HTTP error:', response.status, response.statusText);
+      return { 
+        success: false, 
+        error: `Erreur HTTP: ${response.status} ${response.statusText}` 
+      };
     }
 
-    // Vérifier si la réponse contient un résultat
-    if (data.result && data.result.success === false) {
-      throw new Error(data.result.message || 'Transfert échoué côté Odoo');
+    console.log('[Technician Change] Received response, parsing JSON...');
+    const data = await response.json();
+    console.log('[Technician Change] Full API response:', JSON.stringify(data, null, 2));
+    
+    if (data.error) {
+      console.error('[Technician Change] API error:', {
+        error: data.error,
+        message: data.error.message,
+        data: data.error.data,
+        code: data.error.code
+      });
+      return { 
+        success: false, 
+        error: data.error.data?.message || data.error.message || 'Erreur inconnue',
+        fullError: data.error
+      };
     }
     
-    return {
+    // Check if result indicates failure
+    if (data.result && typeof data.result === 'object' && data.result.success === false) {
+      console.error('[Technician Change] Operation failed:', data.result.message);
+      return { 
+        success: false, 
+        error: data.result.message || 'Opération échouée',
+        fullResponse: data
+      };
+    }
+    
+    if (!data.result) {
+      console.warn('[Technician Change] Empty response from server');
+      return { 
+        success: false, 
+        error: 'Réponse vide du serveur',
+        fullResponse: data
+      };
+    }
+
+    console.log('[Technician Change] Success:', data.result);
+    return { 
       success: true,
       result: data.result,
-      technicianId
+      message: 'Technicien modifié avec succès',
+      fullResponse: data
     };
   } catch (error) {
-    console.error("Erreur lors de l'appel à action_change_technician:", error);
-    throw error;
+    console.error('[Technician Change] Network/processing error:', {
+      error: error,
+      message: error.message,
+      stack: error.stack
+    });
+    return { 
+      success: false, 
+      error: `Erreur réseau: ${error.message}`,
+      fullError: error
+    };
   }
 };

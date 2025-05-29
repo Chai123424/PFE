@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Alert, TextInput, Modal, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,8 +9,7 @@ import DetailCard from "./components/DetailCard";
 import ActionButtons from "./components/ActionButtons";
 import NavigationArrows from "./components/NavigationArrows";
 
-import { fetchTaskById } from "./utils/odooApi"; // ta fonction API à adapter
-import { removeAppointment, allAppointments } from "./data/appointments";
+import { fetchTaskById, reportTask } from "./utils/odooApi";
 
 export default function DetailScreen() {
   const { id } = useLocalSearchParams();
@@ -18,6 +17,9 @@ export default function DetailScreen() {
   const insets = useSafeAreaInsets();
   const [appointment, setAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportDescription, setReportDescription] = useState("");
+  const [isReporting, setIsReporting] = useState(false);
  
   useEffect(() => {
     if (!id) return;
@@ -80,17 +82,59 @@ export default function DetailScreen() {
   };
 
   const handleReport = () => {
-    removeAppointment(id);
-    router.replace({
-      pathname: "/",
-      params: { category: currentAppointmentCategory },
-    });
+    setReportModalVisible(true);
+  };
+
+  const handleConfirmReport = async () => {
+    if (!reportDescription.trim()) {
+      Alert.alert("Erreur", "Veuillez saisir une description pour le signalement.");
+      return;
+    }
+
+    setIsReporting(true);
+    
+    try {
+      const result = await reportTask(id, reportDescription.trim());
+      
+      if (result.success) {
+        Alert.alert(
+          "Succès", 
+          "La tâche a été signalée avec succès. Les administrateurs ont été notifiés.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                // Navigate back to home - the task is already updated in Odoo
+                router.replace({
+                  pathname: "/",
+                  params: { category: currentAppointmentCategory },
+                });
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert("Erreur", result.error || "Une erreur est survenue lors du signalement.");
+      }
+    } catch (error) {
+      console.error("Error reporting task:", error);
+      Alert.alert("Erreur", "Impossible de signaler la tâche. Vérifiez votre connexion.");
+    } finally {
+      setIsReporting(false);
+      setReportModalVisible(false);
+      setReportDescription("");
+    }
+  };
+
+  const handleCancelReport = () => {
+    setReportModalVisible(false);
+    setReportDescription("");
   };
 
   const handleTransfer = () => {
     router.push({
       pathname: "/Screens/TransferScreen",
-      params: { appointmentId: id },
+      params: { taskId: appointment.id },
     });
   };
 
@@ -120,6 +164,55 @@ export default function DetailScreen() {
           />
         </View>
       </View>
+
+      {/* Report Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={reportModalVisible}
+        onRequestClose={handleCancelReport}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Signaler la tâche</Text>
+            <Text style={styles.modalSubtitle}>
+              Veuillez expliquer pourquoi cette tâche doit être reportée :
+            </Text>
+            
+            <TextInput
+              style={styles.textInput}
+              multiline={true}
+              numberOfLines={4}
+              placeholder=""
+              value={reportDescription}
+              onChangeText={setReportDescription}
+              textAlignVertical="top"
+            />
+            
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]} 
+                onPress={handleCancelReport}
+                disabled={isReporting}
+              >
+                <Text style={styles.cancelButtonText}>Annuler</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.confirmButton]} 
+                onPress={handleConfirmReport}
+                disabled={isReporting || !reportDescription.trim()}
+              >
+                {isReporting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Signaler</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -174,5 +267,82 @@ const styles = StyleSheet.create({
   navigationContainer: {
     marginTop: 40,
     paddingBottom: 20,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    margin: 20,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2c3e50',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6c757d',
+    marginBottom: 16,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    minHeight: 100,
+    backgroundColor: '#f8f9fa',
+    marginBottom: 20,
+  },
+  modalButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  cancelButton: {
+    backgroundColor: '#6c757d',
+  },
+  confirmButton: {
+    backgroundColor: '#dc3545',
+  },
+  cancelButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  confirmButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
