@@ -1,5 +1,7 @@
 import { dbOperations } from './sqlite';
 import odooJsonRpc from './OddooJsonRpc'; 
+import * as FileSystem from 'expo-file-system';
+
 
 
 const fetchPartnerDetails = async (partnerId) => {
@@ -512,7 +514,6 @@ export const reportTask = async (taskId, description = "") => {
 export const callOdooActionChangeSingleTechnician = async (taskId, technicianId) => {
   console.log('[Technician Change] Starting process...', { taskId, technicianId });
 
-  // Enhanced validation with better error messages
   if (!taskId || taskId === 'undefined' || taskId === 'null') {
     console.error('[Technician Change] taskId is invalid:', { taskId, type: typeof taskId });
     return { success: false, error: "ID de tâche requis et valide" };
@@ -664,5 +665,156 @@ export const callOdooActionChangeSingleTechnician = async (taskId, technicianId)
       error: `Erreur réseau: ${error.message}`,
       fullError: error
     };
+  }
+};
+
+
+export const uploadPhotoToOdoo = async ({ base64Image, fileName, resModel, resId }) => {
+  const uid = await dbOperations.getConfig('odoo_uid');
+  const password = await dbOperations.getConfig('odoo_password');
+  const url = await dbOperations.getConfig('odoo_url');
+  const dbName = await dbOperations.getConfig('odoo_db');
+
+  if (!uid || !password || !url || !dbName) {
+    throw new Error('Configuration Odoo manquante');
+  }
+
+  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+
+  const payload = {
+    jsonrpc: "2.0",
+    method: "call",
+    params: {
+      service: "object",
+      method: "execute_kw",
+      args: [
+        dbName,
+        parseInt(uid),
+        password,
+        "ir.attachment",
+        "create",
+        [{
+          name: fileName,
+          type: "binary",
+          datas: base64Image,
+          res_model: resModel,
+          res_id: resId,
+          mimetype: "image/jpeg"
+        }]
+      ]
+    },
+    id: Date.now()
+  };
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await response.json();
+
+  if (data.error) {
+    throw new Error(data.error.message);
+  }
+
+  return data.result; // ID de la pièce jointe créée
+};
+
+export const savePhotosToOdoo = async (resId, patientName, beforeImageUri, afterImageUri) => {
+  let attachmentIds = [];
+  let errors = [];
+
+  const processImage = async (uri, nameSuffix) => {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const attachmentId = await uploadPhotoToOdoo({
+        base64Image: base64,
+        fileName: `${patientName}_${nameSuffix}.jpg`,
+        resModel: "project.task", 
+        resId: resId,
+      });
+
+      return { success: true, attachmentId };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  if (beforeImageUri) {
+    const result = await processImage(beforeImageUri, "before");
+    result.success ? attachmentIds.push(result.attachmentId) : errors.push(result.error);
+  }
+
+  if (afterImageUri) {
+    const result = await processImage(afterImageUri, "after");
+    result.success ? attachmentIds.push(result.attachmentId) : errors.push(result.error);
+  }
+
+  return {
+    success: errors.length === 0,
+    message: errors.length === 0
+      ? "Les photos ont été envoyées avec succès à Odoo."
+      : "Certaines photos n'ont pas pu être envoyées.",
+    attachmentIds,
+    errors,
+  };
+};
+
+export const getRecordNameFromOdoo = async (model, id) => {
+  const uid = await dbOperations.getConfig('odoo_uid');
+  const password = await dbOperations.getConfig('odoo_password');
+  const url = await dbOperations.getConfig('odoo_url');
+  const dbName = await dbOperations.getConfig('odoo_db');
+
+  if (!uid || !password || !url || !dbName) {
+    throw new Error('Configuration Odoo manquante');
+  }
+
+  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+
+  const payload = {
+    jsonrpc: "2.0",
+    method: "call",
+    params: {
+      service: "object",
+      method: "execute_kw",
+      args: [
+        dbName,
+        parseInt(uid),
+        password,
+        model,
+        "read",
+        [[parseInt(id)]],
+        { fields: ["partner_name"] }
+      ]
+    },
+    id: Date.now()
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error.message);
+    }
+
+    if (data.result.length > 0) {
+      return data.result[0].partner_name || "";
+    }
+
+    return "";
+  } catch (error) {
+    console.error("Erreur lors de la récupération du nom:", error);
+    throw error;
   }
 };

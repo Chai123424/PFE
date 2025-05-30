@@ -99,3 +99,4 @@ export const removeAppointment = (appointments, appointmentId, currentEmployeeId
     };
   }
 };
+

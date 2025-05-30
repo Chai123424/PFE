@@ -29,7 +29,8 @@ export default function HomeScreen() {
       .filter(task => 
         task.is_stop_maintenance === false && 
         task.state === "01_in_progress" &&
-        task.timer_state !== "reported"
+        task.timer_state !== "reported" 
+        
       )
       .map(task => ({
         id: task.id,

@@ -1,17 +1,37 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { StyleSheet, View, Text, TouchableOpacity, Image, SafeAreaView, StatusBar, Button, Alert } from "react-native"
+import { StyleSheet, View, Text, TouchableOpacity, Image, SafeAreaView, StatusBar, Button, Alert, ActivityIndicator } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter, useLocalSearchParams } from "expo-router"
+import { useOdooAttachments ,getRecordNameFromOdoo,savePhotosToOdoo} from '../utils/odooApi.js' 
+
+
 
 export default function ProfileInfoScreen({ navigation }) {
   const [beforeImage, setBeforeImage] = useState(null)
   const [afterImage, setAfterImage] = useState(null)
-  const [activeSection, setActiveSection] = useState(null) 
+  const [activeSection, setActiveSection] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-  const { id } = useLocalSearchParams() // Get the appointment ID from navigation params
+  const { id } = useLocalSearchParams()
+  const [patientName, setPatientName] = useState("");
+
+useEffect(() => {
+  const fetchName = async () => {
+    try {
+      const name = await getRecordNameFromOdoo("project.task", id); // ou res.partner selon ton modèle
+      setPatientName(name);
+    } catch (error) {
+      console.error("Erreur récupération nom du patient:", error);
+    }
+  };
+
+  fetchName();
+}, [id]);
+  
+  
 
   useEffect(() => {
     ;(async () => {
@@ -34,7 +54,7 @@ export default function ProfileInfoScreen({ navigation }) {
 
     if (!result.canceled) {
       setImageFunction(result.assets[0].uri)
-      setActiveSection(null) // Hide buttons after selection
+      setActiveSection(null)
     }
   }
 
@@ -49,14 +69,71 @@ export default function ProfileInfoScreen({ navigation }) {
 
     if (!result.canceled) {
       setImageFunction(result.assets[0].uri)
-      setActiveSection(null) // Hide buttons after selection
+      setActiveSection(null)
     }
   }
 
   const handleImagePress = (type) => {
-    // Toggle active section
     setActiveSection(activeSection === type ? null : type)
   }
+
+  
+  const handleSaveToOdoo = async () => {
+  if (!beforeImage && !afterImage) {
+    Alert.alert("Erreur", "Veuillez prendre au moins une photo avant de sauvegarder.");
+    return;
+  }
+
+  setIsLoading(true);
+
+  try {
+    const patientName = await getRecordNameFromOdoo("project.task", id); // Ou "res.partner", selon le modèle
+
+    const result = await savePhotosToOdoo(
+      id,              // res_id
+      patientName,     // récupéré dynamiquement
+      beforeImage,
+      afterImage
+    );
+
+    if (result.success) {
+      Alert.alert("Succès", result.message, [
+        {
+          text: "OK",
+          onPress: () => {
+            router.push({
+              pathname: '/Screens/ConfirmationScreen',
+              params: { 
+                id,
+                saved: 'true',
+                attachmentIds: JSON.stringify(result.attachmentIds)
+              }
+            });
+          }
+        }
+      ]);
+    } else {
+      Alert.alert("Erreur", result.message);
+      console.log("Erreurs détaillées:", result.errors);
+    }
+  } catch (error) {
+    Alert.alert("Erreur", "Impossible de sauvegarder les photos dans Odoo");
+    console.error("Erreur sauvegarde Odoo:", error);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+const handleFinish = () => {
+  router.push({
+    pathname: '/Screens/ConfirmationScreen',
+    params: { 
+      id,
+      saved: 'false',
+      attachmentIds: JSON.stringify([]),
+    },
+  });
+};
 
   return (
     <SafeAreaView style={styles.container}>
@@ -72,7 +149,8 @@ export default function ProfileInfoScreen({ navigation }) {
       </View>
 
       {/* Profile Name */}
-      <Text style={styles.profileName}>Msefer Chakir</Text>
+      <Text style={styles.profileName}>{patientName || "Chargement..."}</Text>
+
 
       {/* Before Section */}
       <View style={styles.section}>
@@ -87,12 +165,11 @@ export default function ProfileInfoScreen({ navigation }) {
           )}
         </TouchableOpacity>
 
-        {/* Camera buttons for Before section */}
         {activeSection === "before" && (
           <View style={styles.buttonContainer}>
-            <Button title="Pick an image from camera roll" onPress={() => pickImage("before")} />
+            <Button title="Choisir depuis la galerie" onPress={() => pickImage("before")} />
             <View style={{ marginVertical: 10 }} />
-            <Button title="Take a photo" onPress={() => takePhoto("before")} />
+            <Button title="Prendre une photo" onPress={() => takePhoto("before")} />
           </View>
         )}
       </View>
@@ -110,26 +187,35 @@ export default function ProfileInfoScreen({ navigation }) {
           )}
         </TouchableOpacity>
 
-        {/* Camera buttons for After section */}
         {activeSection === "after" && (
           <View style={styles.buttonContainer}>
-            <Button title="Pick an image from camera roll" onPress={() => pickImage("after")} />
+            <Button title="Choisir depuis la galerie" onPress={() => pickImage("after")} />
             <View style={{ marginVertical: 10 }} />
-            <Button title="Take a photo" onPress={() => takePhoto("after")} />
+            <Button title="Prendre une photo" onPress={() => takePhoto("after")} />
           </View>
         )}
       </View>
 
-      {/* Finish Button */}
-      <TouchableOpacity 
-        style={styles.finishButton} 
-        onPress={() => router.push({
-          pathname: '/Screens/ConfirmationScreen',
-          params: { id } // Pass the appointment ID from navigation params
-        })}
-      >
-        <Text style={styles.finishButtonText}>Terminé</Text>
-      </TouchableOpacity>
+      {/* Action Buttons */}
+      <View style={styles.actionContainer}>
+        {/* Save to Odoo Button */}
+        <TouchableOpacity 
+          style={[styles.saveButton, isLoading && styles.disabledButton]} 
+          onPress={handleSaveToOdoo}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <>
+              <Text style={styles.saveButtonText}>Terminé</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+
+        
+      </View>
     </SafeAreaView>
   )
 }
@@ -155,7 +241,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   placeholder: {
-    width: 40, // To balance the header
+    width: 40,
   },
   profileName: {
     fontSize: 24,
@@ -195,19 +281,25 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 15,
   },
-  finishButton: {
-    backgroundColor: "#3333CC",
-    borderRadius: 25,
-    paddingVertical: 15,
-    alignItems: "center",
+  actionContainer: {
     marginTop: "auto",
     marginBottom: 20,
-    width: "60%",
-    alignSelf: "center",
   },
-  finishButtonText: {
+  saveButton: {
+    backgroundColor: '#2E3192',
+    borderRadius: 20,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 20,
+    
+  },
+  saveButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  
+  disabledButton: {
+    opacity: 0.6,
   },
 })

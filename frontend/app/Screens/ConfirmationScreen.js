@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons'; 
 import { useRouter, useLocalSearchParams } from 'expo-router'; 
-import { removeAppointment } from '../data/appointments';
+//import { removeAppointment, updateAppointment } from '../data/appointments';
 
 export default function ConfirmationScreen() {
   const router = useRouter();
@@ -10,12 +10,11 @@ export default function ConfirmationScreen() {
 
   const handleOKPress = () => {
     if (id) {
-      // Remove the appointment
-      removeAppointment(id);
-      // Navigate back to home screen
+      
+      updateAppointment(id, { display_timer_stop: true });
+      
       router.replace('/');
     } else {
-      
       router.replace('/');
     }
   };
