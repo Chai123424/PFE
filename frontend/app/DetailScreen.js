@@ -9,10 +9,11 @@ import DetailCard from "./components/DetailCard";
 import ActionButtons from "./components/ActionButtons";
 import NavigationArrows from "./components/NavigationArrows";
 
-import { fetchTaskById, reportTask } from "./utils/odooApi";
+import { fetchTaskById, reportTask , startTaskInOdoo} from "./utils/odooApi";
 
 export default function DetailScreen() {
   const { id } = useLocalSearchParams();
+  console.log('Received ID parameter:', id);  
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [appointment, setAppointment] = useState(null);
@@ -23,14 +24,16 @@ export default function DetailScreen() {
  
   useEffect(() => {
     if (!id) return;
-
+  
     async function loadAppointment() {
       setLoading(true);
+      console.log('Fetching task with ID:', id);  
       const taskData = await fetchTaskById(id);
+      console.log('Received task data:', taskData);  
       setAppointment(taskData);
       setLoading(false);
     }
-
+  
     loadAppointment();
   }, [id]);
 
@@ -74,12 +77,38 @@ export default function DetailScreen() {
     }
   }
 
-  const handleLaunch = () => {
-    router.push({
-      pathname: "/Screens/InfoScreen",
-      params: { id },
-    });
-  };
+  // Update the handleLaunch function in DetailScreen.js
+const handleLaunch = async () => {
+  try {
+    // Show loading indicator
+    setLoading(true);
+    
+    const result = await startTaskInOdoo(id);
+    
+    if (result.success) {
+      // Navigate to InfoScreen only if the task was successfully started
+      router.push({
+        pathname: "/Screens/InfoScreen",
+        params: { id },
+      });
+    } else {
+      Alert.alert(
+        "Erreur", 
+        result.error || "Impossible de lancer la tâche. Elle a peut-être déjà été commencée.",
+        [{ text: "OK" }]
+      );
+    }
+  } catch (error) {
+    console.error("Error launching task:", error);
+    Alert.alert(
+      "Erreur", 
+      "Une erreur est survenue lors du lancement de la tâche",
+      [{ text: "OK" }]
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleReport = () => {
     setReportModalVisible(true);
@@ -150,12 +179,16 @@ export default function DetailScreen() {
       
       <View style={styles.contentContainer}>
         <Text style={styles.appointmentName}>
-          {appointment.partner_name || "Tâche sans nom"}
+          {appointment.partner_name ? `${appointment.partner_name}` : "Tâche sans nom"}
         </Text>
 
         <DetailCard appointment={appointment} clientInfo={null} />
 
-        <ActionButtons onLaunch={handleLaunch} onReport={handleReport} />
+        <ActionButtons 
+          onLaunch={handleLaunch} 
+          onReport={handleReport} 
+          isLaunching={loading}  // Pass loading state if needed
+        />
 
         <View style={styles.navigationContainer}>
           <NavigationArrows 

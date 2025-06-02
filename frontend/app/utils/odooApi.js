@@ -1,6 +1,7 @@
 import { dbOperations } from './sqlite';
 import odooJsonRpc from './OddooJsonRpc'; 
 import * as FileSystem from 'expo-file-system';
+import { getLocationAndTime } from './locationUtils';
 
 
 
@@ -816,5 +817,104 @@ export const getRecordNameFromOdoo = async (model, id) => {
   } catch (error) {
     console.error("Erreur lors de la récupération du nom:", error);
     throw error;
+  }
+};
+
+export const startTaskInOdoo = async (taskId) => {
+  const uid = await dbOperations.getConfig('odoo_uid');
+  const password = await dbOperations.getConfig('odoo_password');
+  const url = await dbOperations.getConfig('odoo_url');
+  const dbName = await dbOperations.getConfig('odoo_db');
+
+  if (!uid || !password || !url || !dbName) {
+    console.log('Missing Odoo configuration');
+    return { success: false, error: "Configuration Odoo manquante" };
+  }
+
+  // Get current location and time
+  console.log('Fetching current location and time...');
+  const location = await getLocationAndTime();
+  if (!location) {
+    console.error('Failed to get location information');
+    return { success: false, error: "Impossible d'obtenir la localisation" };
+  }
+
+  // Log location details
+  console.log('Location details:', {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    accuracy: location.accuracy,
+    timestamp: location.timestamp
+  });
+
+  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+
+  const payload = {
+    jsonrpc: "2.0",
+    method: "call",
+    params: {
+      service: "object",
+      method: "execute",
+      args: [
+        dbName,
+        parseInt(uid),
+        password,
+        "project.task",
+        "lance_tache",
+        parseInt(taskId),
+        location.latitude,
+        location.longitude,
+        location.timestamp
+      ]
+    },
+    id: Date.now()
+  };
+
+  console.log('Sending start task request with payload:', JSON.stringify(payload, null, 2));
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    console.log('Start task API response:', JSON.stringify(data, null, 2));
+    
+    if (data.error) {
+      console.error('Start task API error:', data.error);
+      return { success: false, error: data.error.data?.message || data.error.message || 'Erreur inconnue' };
+    }
+    
+    // After starting the task, fetch the task again to verify timer_state
+    console.log('Fetching updated task information to verify timer_state...');
+    const updatedTask = await fetchTaskById(taskId);
+    console.log('Updated task details:', {
+      timer_state: updatedTask?.timer_state,
+      location: updatedTask ? {
+        latitude: updatedTask.x_latitude,
+        longitude: updatedTask.x_longitude,
+        timestamp: updatedTask.x_start_date
+      } : null
+    });
+    
+    return { 
+      success: data.result === true,
+      result: data.result,
+      message: data.result ? 'Tâche lancée avec succès' : 'Impossible de lancer la tâche',
+      timer_state: updatedTask?.timer_state,
+      location: {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        timestamp: location.timestamp
+      }
+    };
+  } catch (error) {
+    console.error("Erreur startTaskInOdoo:", {
+      error: error.message,
+      stack: error.stack
+    });
+    return { success: false, error: "Erreur de connexion" };
   }
 };
