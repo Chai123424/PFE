@@ -11,8 +11,6 @@ export default function ConfirmationScreen() {
   const handleOKPress = () => {
     if (id) {
       
-      updateAppointment(id, { display_timer_stop: true });
-      
       router.replace('/');
     } else {
       router.replace('/');

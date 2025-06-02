@@ -5,7 +5,9 @@ import { StyleSheet, View, Text, TouchableOpacity, Image, SafeAreaView, StatusBa
 import * as ImagePicker from "expo-image-picker"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter, useLocalSearchParams } from "expo-router"
-import { useOdooAttachments ,getRecordNameFromOdoo,savePhotosToOdoo} from '../utils/odooApi.js' 
+import { useOdooAttachments ,getRecordNameFromOdoo,savePhotosToOdoo,stopTacheInOdoo} from '../utils/odooApi.js' 
+import * as Location from 'expo-location';
+
 
 
 
@@ -87,31 +89,46 @@ useEffect(() => {
   setIsLoading(true);
 
   try {
-    const patientName = await getRecordNameFromOdoo("project.task", id); // Ou "res.partner", selon le modèle
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      throw new Error("Permission de localisation non accordée.");
+    }
 
-    const result = await savePhotosToOdoo(
-      id,              // res_id
-      patientName,     // récupéré dynamiquement
-      beforeImage,
-      afterImage
-    );
+    const location = await Location.getCurrentPositionAsync({});
+    const latitude = location.coords.latitude;
+    const longitude = location.coords.longitude;
+
+    const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+
+    const patientName = await getRecordNameFromOdoo("project.task", id);
+    const result = await savePhotosToOdoo(id, patientName, beforeImage, afterImage);
 
     if (result.success) {
-      Alert.alert("Succès", result.message, [
-        {
-          text: "OK",
-          onPress: () => {
-            router.push({
-              pathname: '/Screens/ConfirmationScreen',
-              params: { 
-                id,
-                saved: 'true',
-                attachmentIds: JSON.stringify(result.attachmentIds)
-              }
-            });
+      const stopResult = await stopTacheInOdoo(id, latitude, longitude, timestamp);
+
+      console.log("Résultat stop_tache:", stopResult);
+
+      if (stopResult.result === true) {
+        Alert.alert("Succès", "Tâche arrêtée avec succès.", [
+          {
+            text: "OK",
+            onPress: () => {
+              router.push({
+                pathname: '/Screens/ConfirmationScreen',
+                params: { 
+                  id,
+                  saved: 'true',
+                  attachmentIds: JSON.stringify(result.attachmentIds)
+                }
+              });
+            }
           }
-        }
-      ]);
+        ]);
+      } else if (stopResult.result === false) {
+        Alert.alert("Attention", "Les photos ont été enregistrées, mais la tâche n’a pas pu être arrêtée. Veuillez vérifier l’ID ou les timesheets.");
+      } else {
+        Alert.alert("Erreur", "Réponse inattendue du serveur lors de l’arrêt de la tâche.");
+      }
     } else {
       Alert.alert("Erreur", result.message);
       console.log("Erreurs détaillées:", result.errors);
@@ -122,17 +139,6 @@ useEffect(() => {
   } finally {
     setIsLoading(false);
   }
-};
-
-const handleFinish = () => {
-  router.push({
-    pathname: '/Screens/ConfirmationScreen',
-    params: { 
-      id,
-      saved: 'false',
-      attachmentIds: JSON.stringify([]),
-    },
-  });
 };
 
   return (

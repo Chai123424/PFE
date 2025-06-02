@@ -628,7 +628,6 @@ export const callOdooActionChangeSingleTechnician = async (taskId, technicianId)
       };
     }
     
-    // Check if result indicates failure
     if (data.result && typeof data.result === 'object' && data.result.success === false) {
       console.error('[Technician Change] Operation failed:', data.result.message);
       return { 
@@ -816,5 +815,61 @@ export const getRecordNameFromOdoo = async (model, id) => {
   } catch (error) {
     console.error("Erreur lors de la récupération du nom:", error);
     throw error;
+  }
+};
+
+export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime) => {
+  const uid = await dbOperations.getConfig('odoo_uid');
+  const password = await dbOperations.getConfig('odoo_password');
+  const url = await dbOperations.getConfig('odoo_url');
+  const dbName = await dbOperations.getConfig('odoo_db');
+
+  if (!uid || !password || !url || !dbName) {
+    console.log('Missing Odoo configuration');
+    return { success: false, error: "Configuration Odoo manquante" };
+  }
+
+  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+
+  const payload = {
+    jsonrpc: "2.0",
+    method: "call",
+    params: {
+      service: "object",
+      method: "execute",
+      args: [
+        dbName,
+        parseInt(uid),
+        password,
+        "project.task",           
+        "stop_tache",             
+        parseInt(taskId),
+        latitude,
+        longitude,
+        endDateTime               
+      ]
+    },
+    id: Date.now()
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    console.log('stop_tache API response:', data);
+
+    if (data.error) {
+      console.error('Erreur stop_tache:', data.error);
+      return { success: false, error: data.error };
+    }
+
+    return { success: true, result: data.result };
+  } catch (error) {
+    console.error("Erreur réseau stopTacheInOdoo:", error);
+    return { success: false, error: "Erreur de connexion" };
   }
 };
