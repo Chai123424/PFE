@@ -13,12 +13,12 @@ export default function DetailHeader({ title, category, onSharePress }) {
       onPress={() => router.replace({ pathname: '/', params: { category: category } })}
       style={styles.backButton}
     >
-      <ArrowLeft size={24} color="#3333CC" />
+      <ArrowLeft size={24} color="#1f3493" />
     </TouchableOpacity>
       <Text style={styles.headerTitle}>{title}</Text>
       <TouchableOpacity style={styles.shareButton} onPress={onSharePress}>
         <Image 
-          source={require('../assets/partager.png')}
+          source={require('../assets/partager (2).png')}
           style={styles.shareIconImage}
         />
       </TouchableOpacity>
@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#52AFD4",
+    color: "#1f3493",
   },
   shareButton: {
     padding: 8,

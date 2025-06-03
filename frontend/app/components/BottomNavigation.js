@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     backgroundColor: "#52AFD4",
-    height: 60,
+    height: 80,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
   },

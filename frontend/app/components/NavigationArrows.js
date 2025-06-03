@@ -7,29 +7,75 @@ import { useEffect, useState } from "react"
 
 export default function NavigationArrows({ currentId, category }) {
   const router = useRouter()
-  const [appointments, setAppointments] = useState([])
+  const [filteredAppointments, setFilteredAppointments] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Fetch appointments from Odoo based on category
+  // Apply the same filtering logic as HomeScreen
+  const transformAndFilterTasks = (tasks) => {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    return tasks
+      .filter(task => 
+        task.is_stop_maintenance === false && 
+        task.state === "01_in_progress" &&
+        task.timer_state !== "reported" 
+      )
+      .map(task => ({
+        id: task.id,
+        clientName: task.partner_name || (task.partner_id?.[1]) || 'Client',
+        referenceAndDescription: task.name || 'Unnamed Task',
+        type: task.project_id?.[1] || 'Task',
+        time: task.date_deadline 
+          ? new Date(task.date_deadline).toLocaleTimeString('fr-FR', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            }) 
+          : "--:--",
+        status: "à faire",
+        date_deadline: task.date_deadline,
+        formattedDate: task.date_deadline 
+          ? new Date(task.date_deadline).toLocaleDateString('fr-FR', {
+              day: '2-digit',
+              month: '2-digit', 
+              year: 'numeric'
+            }) 
+          : null,
+        is_stop_maintenance: task.is_stop_maintenance || false,
+      }));
+  };
+
+  // Fetch appointments from Odoo based on category and apply filtering
   useEffect(() => {
     async function loadAppointments() {
       setLoading(true)
-      const tasks = await fetchOdooTasks("", category) // Empty search query, filter by category
-      setAppointments(tasks)
-      setLoading(false)
+      try {
+        const tasks = await fetchOdooTasks("", category) // Empty search query, filter by category
+        const filtered = transformAndFilterTasks(tasks)
+        setFilteredAppointments(filtered)
+      } catch (error) {
+        console.error('Error fetching tasks for navigation:', error)
+        setFilteredAppointments([])
+      } finally {
+        setLoading(false)
+      }
     }
     loadAppointments()
   }, [category])
 
-  // Find current index in the fetched appointments
-  const currentIndex = appointments.findIndex(app => app.id === parseInt(currentId))
+  // Find current index in the filtered appointments
+  const currentIndex = filteredAppointments.findIndex(app => app.id === parseInt(currentId))
 
   // Determine previous/next IDs
-  const prevId = currentIndex > 0 ? appointments[currentIndex - 1].id : null
-  const nextId = currentIndex < appointments.length - 1 ? appointments[currentIndex + 1].id : null
+  const prevId = currentIndex > 0 ? filteredAppointments[currentIndex - 1].id : null
+  const nextId = currentIndex < filteredAppointments.length - 1 ? filteredAppointments[currentIndex + 1].id : null
 
   if (loading) {
     return <View style={styles.container}><Text>Loading...</Text></View>
+  }
+
+  // Don't render if there's only one or no tasks
+  if (filteredAppointments.length <= 1) {
+    return null
   }
 
   return (
@@ -37,7 +83,10 @@ export default function NavigationArrows({ currentId, category }) {
       {/* Previous Button */}
       {prevId ? (
         <TouchableOpacity 
-          onPress={() => router.push(`/DetailScreen?id=${prevId}`)} 
+          onPress={() => router.push({
+            pathname: "/DetailScreen",
+            params: { id: prevId, category: category }
+          })} 
           style={styles.arrowButton}
         >
           <Text style={styles.arrowText}>{"<"}</Text>
@@ -46,10 +95,20 @@ export default function NavigationArrows({ currentId, category }) {
         <View style={styles.placeholder} />
       )}
 
+      {/* Task counter */}
+      <View style={styles.counterContainer}>
+        <Text style={styles.counterText}>
+          {currentIndex + 1} / {filteredAppointments.length}
+        </Text>
+      </View>
+
       {/* Next Button */}
       {nextId ? (
         <TouchableOpacity 
-          onPress={() => router.push(`/DetailScreen?id=${nextId}`)} 
+          onPress={() => router.push({
+            pathname: "/DetailScreen",
+            params: { id: nextId, category: category }
+          })} 
           style={styles.arrowButton}
         >
           <Text style={styles.arrowText}>{">"}</Text>
@@ -72,6 +131,8 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: "#52AFD4",
     borderRadius: 5,
+    minWidth: 40,
+    alignItems: "center",
   },
   arrowText: {
     color: "#fff",
@@ -79,6 +140,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   placeholder: {
+    minWidth: 40,
+  },
+  counterContainer: {
     flex: 1,
+    alignItems: "center",
+  },
+  counterText: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
   }
 })

@@ -9,10 +9,10 @@ import DetailCard from "./components/DetailCard";
 import ActionButtons from "./components/ActionButtons";
 import NavigationArrows from "./components/NavigationArrows";
 
-import { fetchTaskById, reportTask , startTaskInOdoo} from "./utils/odooApi";
+import { fetchTaskById, reportTask, startTaskInOdoo, fetchOdooTasks } from "./utils/odooApi";
 
 export default function DetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, category } = useLocalSearchParams();
   console.log('Received ID parameter:', id);  
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -21,7 +21,61 @@ export default function DetailScreen() {
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportDescription, setReportDescription] = useState("");
   const [isReporting, setIsReporting] = useState(false);
+  const [filteredTaskIds, setFilteredTaskIds] = useState([]);
  
+  // Function to transform and filter tasks (same logic as HomeScreen)
+  const transformAndFilterTasks = (tasks) => {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    return tasks
+      .filter(task => 
+        task.is_stop_maintenance === false && 
+        task.state === "01_in_progress" &&
+        task.timer_state !== "reported" 
+      )
+      .map(task => ({
+        id: task.id,
+        clientName: task.partner_name || (task.partner_id?.[1]) || 'Client',
+        referenceAndDescription: task.name || 'Unnamed Task',
+        type: task.project_id?.[1] || 'Task',
+        time: task.date_deadline 
+          ? new Date(task.date_deadline).toLocaleTimeString('fr-FR', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            }) 
+          : "--:--",
+        status: "à faire",
+        date_deadline: task.date_deadline,
+        formattedDate: task.date_deadline 
+          ? new Date(task.date_deadline).toLocaleDateString('fr-FR', {
+              day: '2-digit',
+              month: '2-digit', 
+              year: 'numeric'
+            }) 
+          : null,
+        is_stop_maintenance: task.is_stop_maintenance || false,
+      }));
+  };
+
+  // Fetch filtered task IDs for navigation
+  useEffect(() => {
+    async function loadFilteredTasks() {
+      try {
+        const tasks = await fetchOdooTasks("", category || "today");
+        const filteredTasks = transformAndFilterTasks(tasks);
+        const taskIds = filteredTasks.map(task => task.id.toString());
+        setFilteredTaskIds(taskIds);
+      } catch (error) {
+        console.error('Error fetching filtered tasks:', error);
+        setFilteredTaskIds([]);
+      }
+    }
+
+    if (category) {
+      loadFilteredTasks();
+    }
+  }, [category]);
+
   useEffect(() => {
     if (!id) return;
   
@@ -78,37 +132,37 @@ export default function DetailScreen() {
   }
 
   // Update the handleLaunch function in DetailScreen.js
-const handleLaunch = async () => {
-  try {
-    // Show loading indicator
-    setLoading(true);
-    
-    const result = await startTaskInOdoo(id);
-    
-    if (result.success) {
-      // Navigate to InfoScreen only if the task was successfully started
-      router.push({
-        pathname: "/Screens/InfoScreen",
-        params: { id },
-      });
-    } else {
+  const handleLaunch = async () => {
+    try {
+      // Show loading indicator
+      setLoading(true);
+      
+      const result = await startTaskInOdoo(id);
+      
+      if (result.success) {
+        // Navigate to InfoScreen only if the task was successfully started
+        router.push({
+          pathname: "/Screens/InfoScreen",
+          params: { id },
+        });
+      } else {
+        Alert.alert(
+          "Erreur", 
+          result.error || "Impossible de lancer la tâche. Elle a peut-être déjà été commencée.",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error) {
+      console.error("Error launching task:", error);
       Alert.alert(
         "Erreur", 
-        result.error || "Impossible de lancer la tâche. Elle a peut-être déjà été commencée.",
+        "Une erreur est survenue lors du lancement de la tâche",
         [{ text: "OK" }]
       );
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Error launching task:", error);
-    Alert.alert(
-      "Erreur", 
-      "Une erreur est survenue lors du lancement de la tâche",
-      [{ text: "OK" }]
-    );
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleReport = () => {
     setReportModalVisible(true);
@@ -193,7 +247,8 @@ const handleLaunch = async () => {
         <View style={styles.navigationContainer}>
           <NavigationArrows 
             currentId={id} 
-            category={currentAppointmentCategory} 
+            category={currentAppointmentCategory}
+            filteredTaskIds={filteredTaskIds} // Pass the filtered task IDs
           />
         </View>
       </View>
@@ -298,7 +353,7 @@ const styles = StyleSheet.create({
     borderColor: "#f5c6cb",
   },
   navigationContainer: {
-    marginTop: 40,
+    marginTop: 220,
     paddingBottom: 20,
   },
   // Modal styles

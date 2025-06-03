@@ -150,23 +150,30 @@ const TransferApp = () => {
           <Text style={styles.noDataText}>Aucun technicien trouvé</Text>
         ) : (
           technicians.map((tech) => (
-            <View key={tech.id} style={styles.techItem}>
-              <Image
-                source={require('../assets/anonyme.png')}
-                style={{ width: 50, height: 50, borderRadius: 25 }}
-              />
-              <Text style={styles.techText}>{tech.name}</Text>
-              <TouchableOpacity
-                onPress={() => setSelectedTech((prev) => (prev === tech.id ? null : tech.id))}
-                style={styles.checkbox}
-              >
+            <TouchableOpacity
+              key={tech.id}
+              style={styles.techItem}
+              onPress={() => setSelectedTech((prev) => (prev === tech.id ? null : tech.id))}
+            >
+              <View style={styles.leftContent}>
+                <View style={styles.techNameRow}>
+                  <Image
+                    source={require('../assets/anonyme.png')}
+                    style={styles.techImage}
+                  />
+                  <Text style={styles.techName}>{tech.name}</Text>
+                </View>
+                <Text style={styles.techDetails}>Technicien disponible</Text>
+              </View>
+              
+              <View style={styles.rightContent}>
                 <Icon
                   name={selectedTech === tech.id ? 'check-square' : 'square-o'}
                   size={24}
-                  color={selectedTech === tech.id ? '#1f3493' : '#ccc'}
+                  color={selectedTech === tech.id ? '#52AFD4' : '#ccc'}
                 />
-              </TouchableOpacity>
-            </View>
+              </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -231,28 +238,53 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   scrollContainer: { flex: 1, marginBottom: 10 },
+  // Updated tech item styles to match AppointmentCard
   techItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 18,
-    marginBottom: 12,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    borderWidth: 5,
-    borderColor: '#41b8de',
-    width: '95%',
-    height: 70,
-    alignSelf: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 10,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: "#52AFD4",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  techText: { fontSize: 17, color: '#343a40', fontWeight: '500' },
-  checkbox: { paddingLeft: 10 },
+  leftContent: {
+    flex: 1,
+  },
+  rightContent: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minWidth: 40,
+  },
+  techNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  techImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 12,
+  },
+  techName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#52AFD4",
+  },
+  techDetails: {
+    fontSize: 14,
+    color: "#666",
+    marginLeft: 44, // Align with text above (32px image + 12px margin)
+  },
   loadingText: { 
     textAlign: 'center', 
     marginTop: 20, 

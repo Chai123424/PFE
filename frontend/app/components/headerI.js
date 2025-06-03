@@ -7,8 +7,8 @@ import {
   StyleSheet,
   StatusBar,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';  
+import { useRouter } from 'expo-router';
+import { ArrowLeft } from 'lucide-react-native';
 
 const HeaderS = () => {
   const router = useRouter();
@@ -17,40 +17,42 @@ const HeaderS = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
-      {/* Header avec bouton retour */}
       <View style={styles.header}>
-      <TouchableOpacity 
-        style={styles.backButton}
-        onPress={() => router.back()}  
-      >
-        <Ionicons name="chevron-back" size={30} color="#1f3493" />
-      </TouchableOpacity>
-
-        <Text style={styles.welcomeText}>Information</Text>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <ArrowLeft size={24} color="#1f3493" />
+        </TouchableOpacity>
+        
+        <Text style={styles.headerTitle}>Transférer</Text>
+        
+        {/* Empty view to balance the layout */}
+        <View style={styles.placeholder} />
       </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 0.2,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-  },
+  
   header: {
     flexDirection: 'row',
-    marginRight: 20,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
   },
   backButton: {
-    paddingTop: 15,
+    padding: 10,
+    marginsLeft: 1,
   },
-  welcomeText: {
-    fontSize: 25,
-    fontWeight: 'bold',
-    marginTop: 10,
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     color: '#1f3493',
-    marginLeft: 65,
+  },
+  placeholder: {
+    width: 44, 
   },
 });
 
