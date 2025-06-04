@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     borderColor: "#f5c6cb",
   },
   navigationContainer: {
-    marginTop: 220,
+    marginTop: 160,
     paddingBottom: 20,
   },
   // Modal styles

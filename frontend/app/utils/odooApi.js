@@ -1,7 +1,7 @@
 import { dbOperations } from './sqlite';
 import odooJsonRpc from './OddooJsonRpc'; 
 import * as FileSystem from 'expo-file-system';
-import { getLocationAndTime } from './locationUtils';
+import { getLocationAndTime, getLocationTimeAndAddress, reverseGeocode } from './locationUtils';
 
 
 
@@ -830,20 +830,21 @@ export const startTaskInOdoo = async (taskId) => {
     return { success: false, error: "Configuration Odoo manquante" };
   }
 
-  // Get current location and time
-  console.log('Fetching current location and time...');
-  const location = await getLocationAndTime();
-  if (!location) {
+  // Get current location, time AND address
+  console.log('Fetching current location, time and address...');
+  const locationData = await getLocationTimeAndAddress();
+  if (!locationData) {
     console.error('Failed to get location information');
     return { success: false, error: "Impossible d'obtenir la localisation" };
   }
 
-  // Log location details
+  // Log location details including address
   console.log('Location details:', {
-    latitude: location.latitude,
-    longitude: location.longitude,
-    accuracy: location.accuracy,
-    timestamp: location.timestamp
+    latitude: locationData.latitude,
+    longitude: locationData.longitude,
+    accuracy: locationData.accuracy,
+    timestamp: locationData.timestamp,
+    address: locationData.address
   });
 
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
@@ -861,9 +862,9 @@ export const startTaskInOdoo = async (taskId) => {
         "project.task",
         "lance_tache",
         parseInt(taskId),
-        location.latitude,
-        location.longitude,
-        location.timestamp
+        locationData.latitude,
+        locationData.longitude,
+        locationData.timestamp
       ]
     },
     id: Date.now()
@@ -904,9 +905,10 @@ export const startTaskInOdoo = async (taskId) => {
       message: data.result ? 'Tâche lancée avec succès' : 'Impossible de lancer la tâche',
       timer_state: updatedTask?.timer_state,
       location: {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        timestamp: location.timestamp
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+        timestamp: locationData.timestamp,
+        address: locationData.address
       }
     };
   } catch (error) {
@@ -918,9 +920,7 @@ export const startTaskInOdoo = async (taskId) => {
   }
 };
 
-
-
-export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime) => {
+export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, includeAddress = true) => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
   const url = await dbOperations.getConfig('odoo_url');
@@ -929,6 +929,15 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime) 
   if (!uid || !password || !url || !dbName) {
     console.log('Missing Odoo configuration');
     return { success: false, error: "Configuration Odoo manquante" };
+  }
+
+  let address = false;
+  
+  // Get address from coordinates if requested
+  if (includeAddress && latitude && longitude) {
+    console.log('Getting address from coordinates...');
+    address = await reverseGeocode(latitude, longitude);
+    console.log('Reverse geocoded address:', address);
   }
 
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
@@ -948,11 +957,14 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime) 
         parseInt(taskId),
         latitude,
         longitude,
-        endDateTime               
+        endDateTime,
+        address || false  // Pass the address to the backend
       ]
     },
     id: Date.now()
   };
+
+  console.log('Stopping task with payload:', JSON.stringify(payload, null, 2));
 
   try {
     const response = await fetch(endpoint, {
@@ -969,7 +981,11 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime) 
       return { success: false, error: data.error };
     }
 
-    return { success: true, result: data.result };
+    return { 
+      success: true, 
+      result: data.result,
+      address: address || 'Adresse non disponible'
+    };
   } catch (error) {
     console.error("Erreur réseau stopTacheInOdoo:", error);
     return { success: false, error: "Erreur de connexion" };

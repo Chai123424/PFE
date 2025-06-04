@@ -32,6 +32,61 @@ export const requestLocationPermission = async () => {
 };
 
 /**
+ * Effectue une géolocalisation inverse (coordonnées -> adresse)
+ * @param {number} latitude 
+ * @param {number} longitude 
+ * @returns {Promise<string|null>} Adresse formatée ou null en cas d'erreur
+ */
+export const reverseGeocode = async (latitude, longitude) => {
+  try {
+    console.log('Reverse geocoding coordinates:', { latitude, longitude });
+    
+    const reverseGeocodedAddress = await Location.reverseGeocodeAsync({
+      latitude,
+      longitude,
+    });
+    
+    console.log('Reverse geocoding result:', reverseGeocodedAddress);
+    
+    if (reverseGeocodedAddress && reverseGeocodedAddress.length > 0) {
+      const address = reverseGeocodedAddress[0];
+      
+      // Construire l'adresse formatée
+      const addressParts = [];
+      
+      if (address.streetNumber) {
+        addressParts.push(address.streetNumber);
+      }
+      if (address.street) {
+        addressParts.push(address.street);
+      }
+      if (address.city) {
+        addressParts.push(address.city);
+      }
+      if (address.postalCode) {
+        addressParts.push(address.postalCode);
+      }
+      if (address.region) {
+        addressParts.push(address.region);
+      }
+      if (address.country) {
+        addressParts.push(address.country);
+      }
+      
+      const formattedAddress = addressParts.join(', ');
+      console.log('Formatted address:', formattedAddress);
+      
+      return formattedAddress || null;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Erreur lors de la géolocalisation inverse:', error);
+    return null;
+  }
+};
+
+/**
  * Obtient la position actuelle de l'utilisateur
  * @param {Object} options - Options pour la géolocalisation
  * @returns {Promise<{latitude: number, longitude: number} | null>}
@@ -79,6 +134,30 @@ export const getCurrentLocation = async (options = {}) => {
     }
     
     Alert.alert('Erreur de géolocalisation', errorMessage, [{ text: 'OK' }]);
+    return null;
+  }
+};
+
+/**
+ * Obtient la position actuelle avec l'adresse
+ * @param {Object} options - Options pour la géolocalisation
+ * @returns {Promise<{latitude: number, longitude: number, address: string} | null>}
+ */
+export const getCurrentLocationWithAddress = async (options = {}) => {
+  try {
+    const location = await getCurrentLocation(options);
+    if (!location) {
+      return null;
+    }
+
+    const address = await reverseGeocode(location.latitude, location.longitude);
+    
+    return {
+      ...location,
+      address: address || 'Adresse inconnue'
+    };
+  } catch (error) {
+    console.error('Erreur getCurrentLocationWithAddress:', error);
     return null;
   }
 };
@@ -158,5 +237,24 @@ export const getLocationAndTime = async () => {
     longitude: location.longitude,
     timestamp: formatDateForOdoo(),
     accuracy: location.accuracy
+  };
+};
+
+/**
+ * Obtient la position, l'heure et l'adresse actuelles formatées pour Odoo
+ * @returns {Promise<{latitude: number, longitude: number, timestamp: string, address: string} | null>}
+ */
+export const getLocationTimeAndAddress = async () => {
+  const location = await getCurrentLocationWithAddress();
+  if (!location) {
+    return null;
+  }
+  
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    timestamp: formatDateForOdoo(),
+    accuracy: location.accuracy,
+    address: location.address
   };
 };
