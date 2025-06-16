@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   scrollContainer: { flex: 1, marginBottom: 10 },
-  // Updated tech item styles to match AppointmentCard
+  
   techItem: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   techDetails: {
     fontSize: 14,
     color: "#666",
-    marginLeft: 44, // Align with text above (32px image + 12px margin)
+    marginLeft: 44, 
   },
   loadingText: { 
     textAlign: 'center', 

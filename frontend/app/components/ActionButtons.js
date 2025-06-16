@@ -1,14 +1,45 @@
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
+import { useEffect, useState } from "react"
+import NetInfo from "@react-native-community/netinfo"
 
 export default function ActionButtons({ onLaunch, onReport }) {
+  const [isOnline, setIsOnline] = useState(true)
+
+  useEffect(() => {
+    
+    NetInfo.fetch().then(state => {
+      setIsOnline(state.isConnected)
+    })
+
+    
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOnline(state.isConnected)
+    })
+
+    
+    return () => unsubscribe()
+  }, [])
+
   return (
     <View style={styles.actionButtons}>
-      <TouchableOpacity style={styles.chooseButton} onPress={onLaunch}>
-        <Text style={styles.chooseButtonText}>Lancer</Text>
+      <TouchableOpacity 
+        style={[styles.chooseButton, !isOnline && styles.disabledButton]} 
+        onPress={onLaunch}
+        disabled={!isOnline}
+      >
+        <Text style={[styles.chooseButtonText, !isOnline && styles.disabledButtonText]}>
+          {isOnline ? "Lancer" : "Lancer"}
+        </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.reportButton} onPress={onReport}>
-        <Text style={styles.reportButtonText}>Reporter</Text>
+      <TouchableOpacity 
+        style={[styles.reportButton, !isOnline && styles.disabledButton]} 
+        onPress={onReport}
+        disabled={!isOnline}
+      >
+        <Text style={[styles.reportButtonText, !isOnline && styles.disabledButtonText]}>
+          Reporter
+        </Text>
       </TouchableOpacity>
     </View>
   )
@@ -48,5 +79,12 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  disabledButton: {
+    backgroundColor: '#cccccc',
+    opacity: 0.7,
+  },
+  disabledButtonText: {
+    color: '#666666',
   },
 })

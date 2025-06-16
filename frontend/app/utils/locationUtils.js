@@ -1,4 +1,4 @@
-// utils/locationUtils.js
+
 import * as Location from 'expo-location';
 import { Alert } from 'react-native';
 
@@ -51,7 +51,7 @@ export const reverseGeocode = async (latitude, longitude) => {
     if (reverseGeocodedAddress && reverseGeocodedAddress.length > 0) {
       const address = reverseGeocodedAddress[0];
       
-      // Construire l'adresse formatée
+      
       const addressParts = [];
       
       if (address.streetNumber) {
@@ -93,13 +93,13 @@ export const reverseGeocode = async (latitude, longitude) => {
  */
 export const getCurrentLocation = async (options = {}) => {
   try {
-    // Vérifier si les permissions sont accordées
+    
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
       return null;
     }
 
-    // Options par défaut
+    
     const defaultOptions = {
       accuracy: Location.Accuracy.High,
       timeout: 15000,
@@ -177,8 +177,8 @@ export const watchLocation = async (callback, options = {}) => {
 
     const defaultOptions = {
       accuracy: Location.Accuracy.High,
-      timeInterval: 10000, // 10 secondes
-      distanceInterval: 10, // 10 mètres
+      timeInterval: 10000, 
+      distanceInterval: 10, 
       ...options
     };
 

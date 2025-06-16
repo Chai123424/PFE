@@ -1,7 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 
-// Fonction utilitaire pour extraire la valeur d'un champ Odoo
 const getOdooValue = (field) => {
   if (!field) return "N/A";
 
@@ -18,7 +17,6 @@ const getOdooValue = (field) => {
   return "N/A";
 };
 
-// Formatage de la date en français
 const formatOdooDate = (dateString) => {
   if (!dateString) return "N/A";
   try {
@@ -30,7 +28,6 @@ const formatOdooDate = (dateString) => {
   }
 };
 
-// Formatage de l'heure en français
 const formatOdooTime = (datetime) => {
   if (!datetime) return "N/A";
   try {
@@ -95,35 +92,35 @@ const styles = StyleSheet.create({
   detailsCard: {
     backgroundColor: "#e6f2f7",
     borderRadius: 12,
-    padding: 16, // Reduced from 30
+    padding: 16, 
     marginHorizontal: 20,
   },
   detailRow: {
     flexDirection: "column",
-    marginBottom: 10, // Reduced from 16
+    marginBottom: 10, 
   },
   detailLabel: {
-    fontSize: 14, // Reduced from 16
+    fontSize: 14, 
     fontWeight: "600",
-    marginBottom: 2, // Reduced from 4
+    marginBottom: 2, 
     color: "#333",
   },
   detailValue: {
-    fontSize: 14, // Reduced from 16
+    fontSize: 14, 
     color: "#666",
-    marginBottom: 4, // Reduced from 8
+    marginBottom: 4, 
   },
   errorCard: {
     backgroundColor: "#ffebee",
     borderRadius: 12,
-    padding: 16, // Reduced from 20
+    padding: 16, 
     marginHorizontal: 20,
     borderColor: "#f44336",
     borderWidth: 1,
   },
   errorText: {
     color: "#f44336",
-    fontSize: 14, // Reduced from 16
+    fontSize: 14, 
     textAlign: "center",
   },
 });

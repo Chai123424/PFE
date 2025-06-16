@@ -4,7 +4,6 @@ export const filterAppointments = (appointments = [], searchQuery = "", activeTa
 
   let dateFiltered = [];
 
-  // S'assurer que appointments est un tableau
   if (!Array.isArray(appointments)) {
     console.warn("appointments is not an array");
     return [];
@@ -76,11 +75,10 @@ export const removeAppointment = (appointments, appointmentId, currentEmployeeId
     const filteredAppointments = appointments.filter(appointment => {
       if (appointment.id !== appointmentId) return true;
 
-      // Ne supprime que si employeeId différent
       if (appointment.employeeId === currentEmployeeId) {
-        return true; // Garde l'appointment
+        return true; 
       }
-      return false; // Supprime l'appointment
+      return false; 
     });
 
     const removed = initialLength > filteredAppointments.length;

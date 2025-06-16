@@ -23,7 +23,6 @@ export default function DetailScreen() {
   const [isReporting, setIsReporting] = useState(false);
   const [filteredTaskIds, setFilteredTaskIds] = useState([]);
  
-  // Function to transform and filter tasks (same logic as HomeScreen)
   const transformAndFilterTasks = (tasks) => {
     if (!tasks || !Array.isArray(tasks)) return [];
     
@@ -57,7 +56,6 @@ export default function DetailScreen() {
       }));
   };
 
-  // Fetch filtered task IDs for navigation
   useEffect(() => {
     async function loadFilteredTasks() {
       try {
@@ -131,16 +129,15 @@ export default function DetailScreen() {
     }
   }
 
-  // Update the handleLaunch function in DetailScreen.js
   const handleLaunch = async () => {
     try {
-      // Show loading indicator
+      
       setLoading(true);
       
       const result = await startTaskInOdoo(id);
       
       if (result.success) {
-        // Navigate to InfoScreen only if the task was successfully started
+        
         router.push({
           pathname: "/Screens/InfoScreen",
           params: { id },
@@ -241,14 +238,14 @@ export default function DetailScreen() {
         <ActionButtons 
           onLaunch={handleLaunch} 
           onReport={handleReport} 
-          isLaunching={loading}  // Pass loading state if needed
+          isLaunching={loading}  
         />
 
         <View style={styles.navigationContainer}>
           <NavigationArrows 
             currentId={id} 
             category={currentAppointmentCategory}
-            filteredTaskIds={filteredTaskIds} // Pass the filtered task IDs
+            filteredTaskIds={filteredTaskIds} 
           />
         </View>
       </View>
@@ -356,7 +353,7 @@ const styles = StyleSheet.create({
     marginTop: 160,
     paddingBottom: 20,
   },
-  // Modal styles
+  
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

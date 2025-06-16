@@ -1,12 +1,10 @@
 import * as SQLite from 'expo-sqlite';
 
-// Open database using the new API
 const db = SQLite.openDatabaseSync('app.db');
 
-// Database initialization
 export const initDatabase = async () => {
   try {
-    // Create table if not exists
+    
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS config (
         key TEXT PRIMARY KEY NOT NULL, 
@@ -16,7 +14,6 @@ export const initDatabase = async () => {
     
     console.log('Database initialized successfully');
     
-    // Set default Odoo configuration if not exists
     const existingUrl = await dbOperations.getConfig('odoo_url');
     const existingDb = await dbOperations.getConfig('odoo_db');
     
@@ -33,7 +30,7 @@ export const initDatabase = async () => {
   }
 };
 
-// Database operations
+
 export const dbOperations = {
   setConfig: async (key, value) => {
     try {
@@ -72,5 +69,4 @@ export const dbOperations = {
   }
 };
 
-// Default export for Expo Router compatibility
 export default dbOperations;

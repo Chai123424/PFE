@@ -68,7 +68,6 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     return [];
   }
 
-  // First, get the employee ID associated with this user
   let employeeId = null;
   try {
     const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
@@ -99,7 +98,7 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     
     const userData = await userResponse.json();
     if (userData.result && userData.result[0] && userData.result[0].employee_id) {
-      employeeId = userData.result[0].employee_id[0]; // [id, name] format for many2one
+      employeeId = userData.result[0].employee_id[0]; 
       console.log('Found employee ID:', employeeId);
     } else {
       console.log('No employee ID found in user data:', userData);
@@ -113,25 +112,22 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     return [];
   }
 
-  // Base domain filters with the new logic for employee assignment
   let domain = [
     ["is_stop_maintenance", "=", false],
-    ["active", "=", true], // Active filter to exclude archived tasks
-    "|", // OR operator for the two employee conditions
-    "&", // AND operator for first condition
+    ["active", "=", true], 
+    "|", 
+    "&", 
     ["employee_id", "=", employeeId],
     ["change_technician", "=", false],
-    "&", // AND operator for second condition  
+    "&",   
     ["employee2_id", "=", employeeId],
     ["change_technician", "=", true]
   ];
   
-  // Add search filter if provided
   if (searchQuery && searchQuery.trim()) {
     domain.push(["name", "ilike", searchQuery.trim()]);
   }
   
-  // Date filters based on active tab
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString().split('T')[0];
@@ -191,13 +187,11 @@ export const fetchOdooTasks = async (searchQuery, activeTab) => {
     
     const result = data.result || [];
     console.log('Raw tasks from API:', result);
-    
-    // Enhanced client-side filtering with debugging for the new logic
+  
     const filteredTasks = result.filter(task => {
       const isStopMaintenanceValid = task.is_stop_maintenance === false;
       const isActiveValid = task.active !== false;
-      
-      // New employee assignment logic
+  
       const isEmployeeCondition1 = task.employee_id && 
                                   task.employee_id[0] === employeeId && 
                                   task.change_technician === false;
@@ -322,7 +316,6 @@ export const fetchTaskById = async (taskId) => {
   }
 };
 
-// Fixed fetchTechniciansById function (renamed for clarity)
 export const fetchTechniciansById = async () => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
@@ -337,7 +330,7 @@ export const fetchTechniciansById = async () => {
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
 
   try {
-    // First, get current user's employee info
+    
     const currentUserPayload = {
       jsonrpc: "2.0",
       method: "call",
@@ -369,8 +362,7 @@ export const fetchTechniciansById = async () => {
 
     if (currentUserData.result && currentUserData.result[0] && currentUserData.result[0].employee_id) {
       currentEmployeeId = currentUserData.result[0].employee_id[0];
-      
-      // Get current employee details
+     
       const currentEmployeePayload = {
         jsonrpc: "2.0",
         method: "call",
@@ -403,7 +395,6 @@ export const fetchTechniciansById = async () => {
       }
     }
 
-    // Get all technicians (excluding "Aide Technicien")
     const allTechniciansPayload = {
       jsonrpc: "2.0",
       method: "call",
@@ -439,8 +430,7 @@ export const fetchTechniciansById = async () => {
     }
     
     const allTechnicians = allTechniciansData.result || [];
-    
-    // Filter out current technician from available list
+   
     const availableTechnicians = currentEmployeeId 
       ? allTechnicians.filter(tech => tech.id !== currentEmployeeId)
       : allTechnicians;
@@ -456,7 +446,6 @@ export const fetchTechniciansById = async () => {
   }
 };
 
-// NEW: Report task function
 export const reportTask = async (taskId, description = "") => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
@@ -504,7 +493,6 @@ export const reportTask = async (taskId, description = "") => {
       return { success: false, error: data.error };
     }
     
-    // The backend method returns the result directly
     return data.result || { success: false, error: "Réponse inattendue du serveur" };
   } catch (error) {
     console.error("Erreur reportTask:", error);
@@ -543,11 +531,10 @@ export const callOdooActionChangeSingleTechnician = async (taskId, technicianId)
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
   console.log('[Technician Change] Using endpoint:', endpoint);
   
-  // More robust parsing with better validation
   let parsedTaskId, parsedTechnicianId;
   
   try {
-    // Handle string numbers and actual numbers
+$
     parsedTaskId = typeof taskId === 'string' ? parseInt(taskId.trim()) : parseInt(taskId);
     parsedTechnicianId = typeof technicianId === 'string' ? parseInt(technicianId.trim()) : parseInt(technicianId);
     
@@ -718,7 +705,7 @@ export const uploadPhotoToOdoo = async ({ base64Image, fileName, resModel, resId
     throw new Error(data.error.message);
   }
 
-  return data.result; // ID de la pièce jointe créée
+  return data.result; 
 };
 
 export const savePhotosToOdoo = async (resId, patientName, beforeImageUri, afterImageUri) => {
@@ -830,7 +817,6 @@ export const startTaskInOdoo = async (taskId) => {
     return { success: false, error: "Configuration Odoo manquante" };
   }
 
-  // Get current location, time AND address
   console.log('Fetching current location, time and address...');
   const locationData = await getLocationTimeAndAddress();
   if (!locationData) {
@@ -838,7 +824,6 @@ export const startTaskInOdoo = async (taskId) => {
     return { success: false, error: "Impossible d'obtenir la localisation" };
   }
 
-  // Log location details including address
   console.log('Location details:', {
     latitude: locationData.latitude,
     longitude: locationData.longitude,
@@ -887,7 +872,6 @@ export const startTaskInOdoo = async (taskId) => {
       return { success: false, error: data.error.data?.message || data.error.message || 'Erreur inconnue' };
     }
     
-    // After starting the task, fetch the task again to verify timer_state
     console.log('Fetching updated task information to verify timer_state...');
     const updatedTask = await fetchTaskById(taskId);
     console.log('Updated task details:', {
@@ -933,7 +917,6 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
 
   let address = false;
   
-  // Get address from coordinates if requested
   if (includeAddress && latitude && longitude) {
     console.log('Getting address from coordinates...');
     address = await reverseGeocode(latitude, longitude);
@@ -958,7 +941,7 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
         latitude,
         longitude,
         endDateTime,
-        address || false  // Pass the address to the backend
+        address || false  
       ]
     },
     id: Date.now()

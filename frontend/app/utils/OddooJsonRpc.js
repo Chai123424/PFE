@@ -1,4 +1,4 @@
-// Authenticate and return the user ID (uid)
+
 export const authenticateOdoo = async (url, db, username, password) => {
     const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
     const payload = {
@@ -23,13 +23,13 @@ export const authenticateOdoo = async (url, db, username, password) => {
     const data = await response.json();
   
     if (data.result) {
-      return data.result; // uid
+      return data.result; 
     } else {
       throw new Error(data.error?.message || 'Authentication failed');
     }
   };
   
-  // Generic function for any Odoo JSON-RPC call
+  
   export const odooJsonRpc = async (url, service, method, args, id = 1) => {
     const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
     const payload = {
