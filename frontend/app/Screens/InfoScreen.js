@@ -7,9 +7,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useOdooAttachments ,getRecordNameFromOdoo,savePhotosToOdoo,stopTacheInOdoo} from '../utils/odooApi.js' 
 import * as Location from 'expo-location';
-
-
-
+import { useNetInfo } from '@react-native-community/netinfo';  // <-- import NetInfo
 
 export default function ProfileInfoScreen({ navigation }) {
   const [beforeImage, setBeforeImage] = useState(null)
@@ -18,23 +16,22 @@ export default function ProfileInfoScreen({ navigation }) {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const { id } = useLocalSearchParams()
-  const [patientName, setPatientName] = useState("");
+  const [patientName, setPatientName] = useState("")
+  const netInfo = useNetInfo()  // <-- hook pour l’état réseau
 
-useEffect(() => {
-  const fetchName = async () => {
-    try {
-      const name = await getRecordNameFromOdoo("project.task", id); 
-      setPatientName(name);
-    } catch (error) {
-      console.error("Erreur récupération nom du patient:", error);
-    }
-  };
+  useEffect(() => {
+    const fetchName = async () => {
+      try {
+        const name = await getRecordNameFromOdoo("project.task", id); 
+        setPatientName(name);
+      } catch (error) {
+        console.error("Erreur récupération nom du patient:", error);
+      }
+    };
 
-  fetchName();
-}, [id]);
+    fetchName();
+  }, [id]);
   
-  
-
   useEffect(() => {
     ;(async () => {
       const cameraStatus = await ImagePicker.requestCameraPermissionsAsync()
@@ -79,67 +76,71 @@ useEffect(() => {
     setActiveSection(activeSection === type ? null : type)
   }
 
-  
   const handleSaveToOdoo = async () => {
-  if (!beforeImage && !afterImage) {
-    Alert.alert("Erreur", "Veuillez prendre au moins une photo avant de sauvegarder.");
-    return;
-  }
-
-  setIsLoading(true);
-
-  try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      throw new Error("Permission de localisation non accordée.");
+    if (!netInfo.isConnected) {
+      Alert.alert("Erreur", "Pas de connexion internet. Veuillez vous connecter pour continuer.");
+      return;
     }
 
-    const location = await Location.getCurrentPositionAsync({});
-    const latitude = location.coords.latitude;
-    const longitude = location.coords.longitude;
+    if (!beforeImage && !afterImage) {
+      Alert.alert("Erreur", "Veuillez prendre au moins une photo avant de sauvegarder.");
+      return;
+    }
 
-    const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+    setIsLoading(true);
 
-    const patientName = await getRecordNameFromOdoo("project.task", id);
-    const result = await savePhotosToOdoo(id, patientName, beforeImage, afterImage);
-
-    if (result.success) {
-      const stopResult = await stopTacheInOdoo(id, latitude, longitude, timestamp);
-
-      console.log("Résultat stop_tache:", stopResult);
-
-      if (stopResult.result === true) {
-        Alert.alert("Succès", "Tâche arrêtée avec succès.", [
-          {
-            text: "OK",
-            onPress: () => {
-              router.push({
-                pathname: '/Screens/ConfirmationScreen',
-                params: { 
-                  id,
-                  saved: 'true',
-                  attachmentIds: JSON.stringify(result.attachmentIds)
-                }
-              });
-            }
-          }
-        ]);
-      } else if (stopResult.result === false) {
-        Alert.alert("Attention", "Les photos ont été enregistrées, mais la tâche n’a pas pu être arrêtée. Veuillez vérifier l’ID ou les timesheets.");
-      } else {
-        Alert.alert("Erreur", "Réponse inattendue du serveur lors de l’arrêt de la tâche.");
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error("Permission de localisation non accordée.");
       }
-    } else {
-      Alert.alert("Erreur", result.message);
-      console.log("Erreurs détaillées:", result.errors);
+
+      const location = await Location.getCurrentPositionAsync({});
+      const latitude = location.coords.latitude;
+      const longitude = location.coords.longitude;
+
+      const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+
+      const patientName = await getRecordNameFromOdoo("project.task", id);
+      const result = await savePhotosToOdoo(id, patientName, beforeImage, afterImage);
+
+      if (result.success) {
+        const stopResult = await stopTacheInOdoo(id, latitude, longitude, timestamp);
+
+        console.log("Résultat stop_tache:", stopResult);
+
+        if (stopResult.result === true) {
+          Alert.alert("Succès", "Tâche arrêtée avec succès.", [
+            {
+              text: "OK",
+              onPress: () => {
+                router.push({
+                  pathname: '/Screens/ConfirmationScreen',
+                  params: { 
+                    id,
+                    saved: 'true',
+                    attachmentIds: JSON.stringify(result.attachmentIds)
+                  }
+                });
+              }
+            }
+          ]);
+        } else if (stopResult.result === false) {
+          Alert.alert("Attention", "Les photos ont été enregistrées, mais la tâche n’a pas pu être arrêtée. Veuillez vérifier l’ID ou les timesheets.");
+        } else {
+          Alert.alert("Erreur", "Réponse inattendue du serveur lors de l’arrêt de la tâche.");
+        }
+      } else {
+        Alert.alert("Erreur", result.message);
+        console.log("Erreurs détaillées:", result.errors);
+      }
+    } catch (error) {
+      Alert.alert("Erreur", "Impossible de sauvegarder les photos dans Odoo");
+      console.error("Erreur sauvegarde Odoo:", error);
+    } finally {
+      setIsLoading(false);
     }
-  } catch (error) {
-    Alert.alert("Erreur", "Impossible de sauvegarder les photos dans Odoo");
-    console.error("Erreur sauvegarde Odoo:", error);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -156,7 +157,6 @@ useEffect(() => {
 
       {/* Profile Name */}
       <Text style={styles.profileName}>{patientName || "Chargement..."}</Text>
-
 
       {/* Before Section */}
       <View style={styles.section}>
@@ -206,21 +206,18 @@ useEffect(() => {
       <View style={styles.actionContainer}>
         {/* Save to Odoo Button */}
         <TouchableOpacity 
-          style={[styles.saveButton, isLoading && styles.disabledButton]} 
+          style={[styles.saveButton, (isLoading || !netInfo.isConnected) && styles.disabledButton]} 
           onPress={handleSaveToOdoo}
-          disabled={isLoading}
+          disabled={isLoading || !netInfo.isConnected}
         >
           {isLoading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <>
-              <Text style={styles.saveButtonText}>Terminé</Text>
-            </>
+            <Text style={styles.saveButtonText}>
+              {netInfo.isConnected ? 'Terminé' : 'Pas de connexion'}
+            </Text>
           )}
         </TouchableOpacity>
-
-
-        
       </View>
     </SafeAreaView>
   )
@@ -297,14 +294,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 20,
-    
   },
   saveButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
   },
-  
   disabledButton: {
     opacity: 0.6,
   },
