@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, ActivityIndicator, Text } from "react-nativ
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import NetInfo from '@react-native-community/netinfo';
 import Header from "../components/Header";
 import SearchBar from "../components/SearchBar";
 import AppointmentCard from "../components/AppointmentCard";
@@ -21,6 +22,30 @@ export default function HomeScreen() {
   const [tasks, setTasks] = useState([]);
   const [username, setUsername] = useState("Loading...");
   const [userId, setUserId] = useState(null);
+  const [isConnected, setIsConnected] = useState(true);
+  const [networkError, setNetworkError] = useState(false);
+
+  // Surveillance de la connexion réseau
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      console.log('Network state:', state);
+      setIsConnected(state.isConnected);
+      
+      // Si la connexion revient, recharger les données
+      if (state.isConnected && !isConnected) {
+        setNetworkError(false);
+        fetchUserInfo();
+        fetchAndStoreTasks();
+      }
+    });
+
+    // Vérification initiale de la connexion
+    NetInfo.fetch().then(state => {
+      setIsConnected(state.isConnected);
+    });
+
+    return () => unsubscribe();
+  }, [isConnected]);
 
   const transformTasksToAppointments = useCallback((tasks) => {
     if (!tasks || !Array.isArray(tasks)) return [];
@@ -30,7 +55,6 @@ export default function HomeScreen() {
         task.is_stop_maintenance === false && 
         task.state === "01_in_progress" &&
         task.timer_state !== "reported" 
-        
       )
       .map(task => ({
         id: task.id,
@@ -57,29 +81,46 @@ export default function HomeScreen() {
   }, []);
 
   const fetchUserInfo = useCallback(async () => {
+    if (!isConnected) {
+      setUsername("Hors ligne");
+      return;
+    }
+
     try {
       const userInfo = await fetchOdooUserInfo();
       setUsername(userInfo?.name || "User");
+      setNetworkError(false);
     } catch (error) {
       console.error('Error fetching user info:', error);
       setUsername("User");
+      setNetworkError(true);
     }
-  }, []);
+  }, [isConnected]);
 
   const fetchAndStoreTasks = useCallback(async () => {
+    if (!isConnected) {
+      setLoading(false);
+      setFilteredAppointments([]);
+      setTasks([]);
+      return;
+    }
+
     setLoading(true);
     try {
       const tasks = await fetchOdooTasks("", activeTab);
       setTasks(tasks);
       const transformed = transformTasksToAppointments(tasks);
       setFilteredAppointments(transformed);
+      setNetworkError(false);
     } catch (error) {
       console.error('Error fetching tasks:', error);
       setFilteredAppointments([]);
+      setTasks([]);
+      setNetworkError(true);
     } finally {
       setLoading(false);
     }
-  }, [activeTab, transformTasksToAppointments]);
+  }, [activeTab, transformTasksToAppointments, isConnected]);
 
   const applySearchFilter = useCallback(() => {
     if (!tasks.length) return;
@@ -93,12 +134,16 @@ export default function HomeScreen() {
   }, [tasks, searchQuery, transformTasksToAppointments]);
 
   useEffect(() => {
-    fetchUserInfo();
-    fetchAndStoreTasks();
-  }, []);
+    if (isConnected) {
+      fetchUserInfo();
+      fetchAndStoreTasks();
+    }
+  }, [isConnected]);
 
   useEffect(() => {
-    fetchAndStoreTasks();
+    if (isConnected) {
+      fetchAndStoreTasks();
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -107,48 +152,101 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchAndStoreTasks();
-    }, [fetchAndStoreTasks])
+      if (isConnected) {
+        fetchAndStoreTasks();
+      }
+    }, [fetchAndStoreTasks, isConnected])
   );
 
   const handleAppointmentPress = (id) => {
+    if (!isConnected) {
+      return; // Ne pas naviguer si pas de connexion
+    }
     router.push(`/DetailScreen?id=${id}&category=${activeTab}`);
+  };
+
+  const renderContent = () => {
+    // Pas de connexion internet
+    if (!isConnected) {
+      return (
+        <View style={styles.noConnectionContainer}>
+          <Text style={styles.noConnectionTitle}>Pas de connexion</Text>
+          <Text style={styles.noConnectionMessage}>
+            Vérifiez votre connexion internet pour accéder aux tâches
+          </Text>
+        </View>
+      );
+    }
+
+    // Chargement en cours
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Chargement des tâches...</Text>
+        </View>
+      );
+    }
+
+    // Erreur réseau pendant le chargement
+    if (networkError) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Erreur de connexion</Text>
+          <Text style={styles.errorMessage}>
+            Impossible de charger les tâches. Vérifiez votre connexion.
+          </Text>
+        </View>
+      );
+    }
+
+    // Liste des tâches
+    return (
+      <FlatList
+        data={filteredAppointments}
+        renderItem={({ item }) => (
+          <AppointmentCard 
+            appointment={item} 
+            onPress={() => handleAppointmentPress(item.id)} 
+          />
+        )}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={styles.listContainer}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text>Aucun rendez-vous trouvé</Text>
+          </View>
+        }
+      />
+    );
   };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="auto" />
-      <Header username={username} showTransferIcon={false} onTransfer={null} />
-      <SearchBar 
-        onChangeText={setSearchQuery} 
-        value={searchQuery}
-        placeholder="Rechercher par nom de client"
+      <Header 
+        username={username} 
+        showTransferIcon={false} 
+        onTransfer={null}
+        isOffline={!isConnected}
       />
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" />
-        </View>
-      ) : (
-        <FlatList
-          data={filteredAppointments}
-          renderItem={({ item }) => (
-            <AppointmentCard 
-              appointment={item} 
-              onPress={() => handleAppointmentPress(item.id)} 
-            />
-          )}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text>Aucun rendez-vous trouvé</Text>
-            </View>
-          }
+      
+      {/* N'afficher la barre de recherche que si connecté */}
+      {isConnected && (
+        <SearchBar 
+          onChangeText={setSearchQuery} 
+          value={searchQuery}
+          placeholder="Rechercher par nom de client"
         />
       )}
 
-      <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+      {renderContent()}
+
+      <BottomNavigation 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab}
+        disabled={!isConnected}
+      />
     </View>
   );
 }
@@ -167,10 +265,51 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 50,
+  },
+  noConnectionContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  noConnectionTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#e74c3c',
+    marginBottom: 10,
+  },
+  noConnectionMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#666',
+    lineHeight: 24,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#e74c3c',
+    marginBottom: 50,
+  },
+  errorMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#666',
+    lineHeight: 24,
   },
 });
