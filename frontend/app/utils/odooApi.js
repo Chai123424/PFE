@@ -3,7 +3,17 @@ import odooJsonRpc from './OddooJsonRpc';
 import * as FileSystem from 'expo-file-system';
 import { getLocationAndTime, getLocationTimeAndAddress, reverseGeocode } from './locationUtils';
 
-
+// UTILITY FUNCTION: Create consistent timestamp format for Odoo
+const formatTimestampForOdoo = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
 
 const fetchPartnerDetails = async (partnerId) => {
   const uid = await dbOperations.getConfig('odoo_uid');
@@ -27,7 +37,6 @@ const fetchPartnerDetails = async (partnerId) => {
         "read",
         [parseInt(partnerId)],
         ["partner_name", "phone", "mobile", "street", "street2", "city", "zip", "state_id", "country_id", "email", "company_name", "parent_id", "customer_rank"]
-
       ]
     },
     id: Date.now()
@@ -330,7 +339,6 @@ export const fetchTechniciansById = async () => {
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
 
   try {
-    
     const currentUserPayload = {
       jsonrpc: "2.0",
       method: "call",
@@ -377,7 +385,6 @@ export const fetchTechniciansById = async () => {
             "read",
             [currentEmployeeId],
             ['id', 'name', 'job_title']
-
           ]
         },
         id: Date.now()
@@ -534,7 +541,6 @@ export const callOdooActionChangeSingleTechnician = async (taskId, technicianId)
   let parsedTaskId, parsedTechnicianId;
   
   try {
-$
     parsedTaskId = typeof taskId === 'string' ? parseInt(taskId.trim()) : parseInt(taskId);
     parsedTechnicianId = typeof technicianId === 'string' ? parseInt(technicianId.trim()) : parseInt(technicianId);
     
@@ -654,7 +660,6 @@ $
     };
   }
 };
-
 
 export const uploadPhotoToOdoo = async ({ base64Image, fileName, resModel, resId }) => {
   const uid = await dbOperations.getConfig('odoo_uid');
@@ -824,11 +829,25 @@ export const startTaskInOdoo = async (taskId) => {
     return { success: false, error: "Impossible d'obtenir la localisation" };
   }
 
+  // FIXED: Convert timestamp to consistent format if needed
+  let formattedTimestamp = locationData.timestamp;
+  if (typeof locationData.timestamp === 'string' && locationData.timestamp.includes('T')) {
+    const date = new Date(locationData.timestamp);
+    formattedTimestamp = formatTimestampForOdoo(date);
+  } else if (typeof locationData.timestamp === 'string') {
+    // Already in correct format, but verify it doesn't have 'T'
+    formattedTimestamp = locationData.timestamp;
+  } else {
+    // If it's a Date object or invalid, format it properly
+    formattedTimestamp = formatTimestampForOdoo(new Date(locationData.timestamp));
+  }
+
   console.log('Location details:', {
     latitude: locationData.latitude,
     longitude: locationData.longitude,
     accuracy: locationData.accuracy,
-    timestamp: locationData.timestamp,
+    originalTimestamp: locationData.timestamp,
+    formattedTimestamp: formattedTimestamp,
     address: locationData.address
   });
 
@@ -849,7 +868,7 @@ export const startTaskInOdoo = async (taskId) => {
         parseInt(taskId),
         locationData.latitude,
         locationData.longitude,
-        locationData.timestamp
+        formattedTimestamp  // Use the properly formatted timestamp
       ]
     },
     id: Date.now()
@@ -891,7 +910,7 @@ export const startTaskInOdoo = async (taskId) => {
       location: {
         latitude: locationData.latitude,
         longitude: locationData.longitude,
-        timestamp: locationData.timestamp,
+        timestamp: formattedTimestamp,  // Use the formatted timestamp
         address: locationData.address
       }
     };
@@ -915,16 +934,70 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
     return { success: false, error: "Configuration Odoo manquante" };
   }
 
+  // ENHANCED: Get current task data first to validate dates
+  console.log('Fetching current task data to validate dates...');
+  const currentTask = await fetchTaskById(taskId);
+  if (!currentTask) {
+    console.error('Could not fetch current task data');
+    return { success: false, error: "Impossible de récupérer les données de la tâche" };
+  }
+
+  // ENHANCED: Format the timestamp and validate against current task dates
+  let formattedEndDateTime = endDateTime;
+  
+  // If endDateTime is a Date object, format it
+  if (endDateTime instanceof Date) {
+    formattedEndDateTime = formatTimestampForOdoo(endDateTime);
+  }
+  // If endDateTime is an ISO string (contains 'T'), convert it
+  else if (typeof endDateTime === 'string' && endDateTime.includes('T')) {
+    const date = new Date(endDateTime);
+    formattedEndDateTime = formatTimestampForOdoo(date);
+  }
+  // If no endDateTime provided, use current time
+  else if (!endDateTime) {
+    formattedEndDateTime = formatTimestampForOdoo();
+  }
+
+  console.log('Task validation details:', {
+    taskId: taskId,
+    originalEndDateTime: endDateTime,
+    formattedEndDateTime: formattedEndDateTime,
+    currentTaskStartDate: currentTask.date_assign,
+    currentTaskDeadline: currentTask.date_deadline,
+    timerState: currentTask.timer_state
+  });
+
+  // ENHANCED: Validate that end time is not before start time
+  if (currentTask.date_assign) {
+    const taskStartDate = new Date(currentTask.date_assign);
+    const taskEndDate = new Date(formattedEndDateTime);
+    
+    if (taskEndDate < taskStartDate) {
+      console.warn('End date is before start date, adjusting...');
+      // Adjust end date to be at least 1 minute after start date
+      const adjustedEndDate = new Date(taskStartDate.getTime() + 60000); // Add 1 minute
+      formattedEndDateTime = formatTimestampForOdoo(adjustedEndDate);
+      console.log('Adjusted end date to:', formattedEndDateTime);
+    }
+  }
+
   let address = false;
   
   if (includeAddress && latitude && longitude) {
     console.log('Getting address from coordinates...');
-    address = await reverseGeocode(latitude, longitude);
-    console.log('Reverse geocoded address:', address);
+    try {
+      address = await reverseGeocode(latitude, longitude);
+      console.log('Reverse geocoded address:', address);
+    } catch (geocodeError) {
+      console.warn('Geocoding failed, continuing without address:', geocodeError);
+      address = false;
+    }
   }
 
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
 
+  // ENHANCED: Add more detailed logging and error handling
   const payload = {
     jsonrpc: "2.0",
     method: "call",
@@ -938,9 +1011,9 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
         "project.task",           
         "stop_tache",             
         parseInt(taskId),
-        latitude,
-        longitude,
-        endDateTime,
+        parseFloat(latitude) || 0.0,  // Ensure proper number format
+        parseFloat(longitude) || 0.0, // Ensure proper number format
+        formattedEndDateTime,
         address || false  
       ]
     },
@@ -956,21 +1029,91 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
       body: JSON.stringify(payload),
     });
 
+    if (!response.ok) {
+      console.error('HTTP error:', response.status, response.statusText);
+      return { 
+        success: false, 
+        error: `Erreur HTTP: ${response.status} ${response.statusText}` 
+      };
+    }
+
     const data = await response.json();
-    console.log('stop_tache API response:', data);
+    console.log('stop_tache API response:', JSON.stringify(data, null, 2));
 
     if (data.error) {
       console.error('Erreur stop_tache:', data.error);
-      return { success: false, error: data.error };
+      
+      // ENHANCED: Handle specific validation errors
+      let errorMessage = data.error.data?.message || data.error.message || 'Erreur inconnue';
+      
+      // If it's a date validation error, provide more helpful message
+      if (errorMessage.includes('planned start date must be before') || 
+          errorMessage.includes('planned_dates_check')) {
+        errorMessage = "Erreur de validation des dates. Veuillez réessayer dans quelques secondes.";
+        
+        // Optionally, try again with current timestamp
+        console.log('Date validation error detected, retrying with current timestamp...');
+        const retryEndDateTime = formatTimestampForOdoo();
+        
+        const retryPayload = {
+          ...payload,
+          params: {
+            ...payload.params,
+            args: [
+              ...payload.params.args.slice(0, -2), // Keep all args except timestamp and address
+              retryEndDateTime,
+              address || false
+            ]
+          }
+        };
+        
+        console.log('Retrying with payload:', JSON.stringify(retryPayload, null, 2));
+        
+        try {
+          const retryResponse = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(retryPayload),
+          });
+          
+          const retryData = await retryResponse.json();
+          console.log('Retry response:', retryData);
+          
+          if (!retryData.error && retryData.result) {
+            return { 
+              success: true, 
+              result: retryData.result,
+              address: address || 'Adresse non disponible',
+              timestamp: retryEndDateTime,
+              retried: true
+            };
+          }
+        } catch (retryError) {
+          console.error('Retry also failed:', retryError);
+        }
+      }
+      
+      return { 
+        success: false, 
+        error: errorMessage,
+        fullError: data.error 
+      };
     }
 
+    console.log('Résultat stop_tache:', data);
+    
     return { 
       success: true, 
       result: data.result,
-      address: address || 'Adresse non disponible'
+      address: address || 'Adresse non disponible',
+      timestamp: formattedEndDateTime
     };
   } catch (error) {
     console.error("Erreur réseau stopTacheInOdoo:", error);
-    return { success: false, error: "Erreur de connexion" };
+    return { 
+      success: false, 
+      error: `Erreur de connexion: ${error.message}`,
+      fullError: error 
+    };
   }
 };

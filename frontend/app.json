@@ -7,6 +7,9 @@
     ],
     "name": "frontend",
     "slug": "frontend",
-    "jsEngine": "jsc"
+    "jsEngine": "jsc",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": ["ios", "android", "web"]
   }
 }
