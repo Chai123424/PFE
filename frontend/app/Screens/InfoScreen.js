@@ -7,7 +7,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useOdooAttachments ,getRecordNameFromOdoo,savePhotosToOdoo,stopTacheInOdoo} from '../utils/odooApi.js' 
 import * as Location from 'expo-location';
-import { useNetInfo } from '@react-native-community/netinfo';  // <-- import NetInfo
+import { useNetInfo } from '@react-native-community/netinfo';  
 
 export default function ProfileInfoScreen({ navigation }) {
   const [beforeImage, setBeforeImage] = useState(null)
@@ -17,7 +17,7 @@ export default function ProfileInfoScreen({ navigation }) {
   const router = useRouter()
   const { id } = useLocalSearchParams()
   const [patientName, setPatientName] = useState("")
-  const netInfo = useNetInfo()  // <-- hook pour l’état réseau
+  const netInfo = useNetInfo()  
 
   useEffect(() => {
     const fetchName = async () => {
@@ -82,11 +82,6 @@ export default function ProfileInfoScreen({ navigation }) {
       return;
     }
 
-    if (!beforeImage && !afterImage) {
-      Alert.alert("Erreur", "Veuillez prendre au moins une photo avant de sauvegarder.");
-      return;
-    }
-
     setIsLoading(true);
 
     try {
@@ -101,42 +96,50 @@ export default function ProfileInfoScreen({ navigation }) {
 
       const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
 
-      const patientName = await getRecordNameFromOdoo("project.task", id);
-      const result = await savePhotosToOdoo(id, patientName, beforeImage, afterImage);
+      let attachmentIds = [];
 
-      if (result.success) {
-        const stopResult = await stopTacheInOdoo(id, latitude, longitude, timestamp);
+      if (beforeImage || afterImage) {
+        const patientName = await getRecordNameFromOdoo("project.task", id);
+        const result = await savePhotosToOdoo(id, patientName, beforeImage, afterImage);
 
-        console.log("Résultat stop_tache:", stopResult);
-
-        if (stopResult.result === true) {
-          Alert.alert("Succès", "Tâche arrêtée avec succès.", [
-            {
-              text: "OK",
-              onPress: () => {
-                router.push({
-                  pathname: '/Screens/ConfirmationScreen',
-                  params: { 
-                    id,
-                    saved: 'true',
-                    attachmentIds: JSON.stringify(result.attachmentIds)
-                  }
-                });
-              }
-            }
-          ]);
-        } else if (stopResult.result === false) {
-          Alert.alert("Attention", "Les photos ont été enregistrées, mais la tâche n’a pas pu être arrêtée. Veuillez vérifier l’ID ou les timesheets.");
+        if (result.success) {
+          attachmentIds = result.attachmentIds;
         } else {
-          Alert.alert("Erreur", "Réponse inattendue du serveur lors de l’arrêt de la tâche.");
+          Alert.alert("Erreur", result.message);
+          console.log("Erreurs détaillées:", result.errors);
+          setIsLoading(false);
+          return;
         }
+      }
+
+      const stopResult = await stopTacheInOdoo(id, latitude, longitude, timestamp);
+
+      console.log("Résultat stop_tache:", stopResult);
+
+      if (stopResult.result === true) {
+        Alert.alert("Succès", "Tâche terminée avec succès.", [
+          {
+            text: "OK",
+            onPress: () => {
+              router.push({
+                pathname: '/Screens/ConfirmationScreen',
+                params: { 
+                  id,
+                  saved: 'true',
+                  attachmentIds: JSON.stringify(attachmentIds)
+                }
+              });
+            }
+          }
+        ]);
+      } else if (stopResult.result === false) {
+        Alert.alert("Attention", "La tâche n'a pas pu être arrêtée. Veuillez vérifier l'ID ou les timesheets.");
       } else {
-        Alert.alert("Erreur", result.message);
-        console.log("Erreurs détaillées:", result.errors);
+        Alert.alert("Erreur", "Réponse inattendue du serveur lors de l'arrêt de la tâche.");
       }
     } catch (error) {
-      Alert.alert("Erreur", "Impossible de sauvegarder les photos dans Odoo");
-      console.error("Erreur sauvegarde Odoo:", error);
+      Alert.alert("Erreur", "Impossible de terminer la tâche");
+      console.error("Erreur terminaison tâche:", error);
     } finally {
       setIsLoading(false);
     }
@@ -160,7 +163,7 @@ export default function ProfileInfoScreen({ navigation }) {
 
       {/* Before Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Avant:</Text>
+        <Text style={styles.sectionTitle}>Avant: </Text>
         <TouchableOpacity style={styles.imageContainer} onPress={() => handleImagePress("before")}>
           {beforeImage ? (
             <Image source={{ uri: beforeImage }} style={styles.image} />
@@ -182,7 +185,7 @@ export default function ProfileInfoScreen({ navigation }) {
 
       {/* After Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Après:</Text>
+        <Text style={styles.sectionTitle}>Après: </Text>
         <TouchableOpacity style={styles.imageContainer} onPress={() => handleImagePress("after")}>
           {afterImage ? (
             <Image source={{ uri: afterImage }} style={styles.image} />
