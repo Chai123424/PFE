@@ -15,6 +15,254 @@ const formatTimestampForOdoo = (date = new Date()) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
 
+// Cache for employee ID to avoid repeated API calls
+let employeeIdCache = null;
+let employeeIdCacheTimestamp = null;
+const EMPLOYEE_CACHE_TTL = 300000; // 5 minutes
+
+const getEmployeeId = async () => {
+  // Check cache first
+  if (employeeIdCache && employeeIdCacheTimestamp && 
+      (Date.now() - employeeIdCacheTimestamp < EMPLOYEE_CACHE_TTL)) {
+    console.log('Using cached employee ID:', employeeIdCache);
+    return employeeIdCache;
+  }
+
+  const uid = await dbOperations.getConfig('odoo_uid');
+  const password = await dbOperations.getConfig('odoo_password');
+  const url = await dbOperations.getConfig('odoo_url');
+  const dbName = await dbOperations.getConfig('odoo_db');
+
+  try {
+    const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+    const userPayload = {
+      jsonrpc: "2.0",
+      method: "call",
+      params: {
+        service: "object",
+        method: "execute",
+        args: [
+          dbName,
+          parseInt(uid),
+          password,
+          "res.users",
+          "read",
+          [parseInt(uid)],
+          ["employee_id"] 
+        ]
+      },
+      id: Date.now()
+    };
+
+    const userResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userPayload)
+    });
+    
+    const userData = await userResponse.json();
+    if (userData.result && userData.result[0] && userData.result[0].employee_id) {
+      employeeIdCache = userData.result[0].employee_id[0];
+      employeeIdCacheTimestamp = Date.now();
+      console.log('Cached new employee ID:', employeeIdCache);
+      return employeeIdCache;
+    }
+  } catch (e) {
+    console.error('Failed to fetch employee ID:', e);
+  }
+
+  return null;
+};
+
+// Optimized domain builder with precise filtering
+const buildOptimizedDomain = (employeeId, searchQuery, activeTab) => {
+  const domain = [
+    // Basic required filters - most restrictive first for better DB performance
+    ["state", "=", "01_in_progress"],
+    ["active", "=", true],
+    ["is_stop_maintenance", "=", false],
+    ["timer_state", "!=", "reported"],
+    
+    // Employee assignment logic (OR condition)
+    "|", 
+    ["&", ["employee_id", "=", employeeId], ["change_technician", "=", false]],
+    ["&", ["employee2_id", "=", employeeId], ["change_technician", "=", true]]
+  ];
+  
+  // Date filtering - precise and server-side optimized
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+  todayEnd.setMilliseconds(-1); // 23:59:59.999
+  
+  const todayStartStr = todayStart.toISOString().split('T')[0] + ' 00:00:00';
+  const todayEndStr = todayEnd.toISOString().split('T')[0] + ' 23:59:59';
+  
+  if (activeTab === 'today') {
+    domain.push(['date_deadline', '>=', todayStartStr]);
+    domain.push(['date_deadline', '<=', todayEndStr]);
+  } else if (activeTab === 'upcoming') {
+    domain.push(['date_deadline', '>', todayEndStr]);
+  } else if (activeTab === 'past') {
+    domain.push(['date_deadline', '<', todayStartStr]);
+  }
+  
+  // Search query filtering - use ilike for case-insensitive search
+  if (searchQuery && searchQuery.trim().length > 0) {
+    const trimmedQuery = searchQuery.trim();
+    domain.push("|");
+    domain.push(["name", "ilike", trimmedQuery]);
+    domain.push(["partner_name", "ilike", trimmedQuery]);
+  }
+  
+  return domain;
+};
+
+export const fetchOdooTasks = async (searchQuery, activeTab) => {
+  const uid = await dbOperations.getConfig('odoo_uid');
+  const password = await dbOperations.getConfig('odoo_password');
+  const url = await dbOperations.getConfig('odoo_url');
+  const dbName = await dbOperations.getConfig('odoo_db');
+
+  console.log('Config validation:', { 
+    uid: !!uid, 
+    password: !!password, 
+    url: !!url, 
+    dbName: !!dbName 
+  });
+
+  if (!uid || !password || !url || !dbName) {
+    console.log('Missing config, returning empty array');
+    return [];
+  }
+
+  // Get employee ID with caching
+  const employeeId = await getEmployeeId();
+  if (!employeeId) {
+    console.log('No employee ID found for this user');
+    return [];
+  }
+
+  // Build optimized domain
+  const domain = buildOptimizedDomain(employeeId, searchQuery, activeTab);
+  
+  console.log('Optimized domain filters:', {
+    activeTab,
+    searchQuery: searchQuery?.trim() || 'none',
+    employeeId,
+    domainLength: domain.length
+  });
+
+  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+  
+  // Optimized field selection - only essential fields
+  const essentialFields = [
+    "id", "name", "date_deadline", "partner_id", "partner_name", 
+    "partner_phone", "partner_address_complete", "employee_id", 
+    "employee2_id", "change_technician", "state", "timer_state", 
+    "is_stop_maintenance", "active", "stage_id", "project_id"
+  ];
+
+  const payload = {
+    jsonrpc: "2.0",
+    method: "call",
+    params: {
+      service: "object",
+      method: "search_read",
+      args: [
+        dbName,
+        parseInt(uid),
+        password,
+        "project.task",
+        domain,
+        essentialFields,
+        {
+          // Performance optimizations
+          limit: 1000, // Reasonable limit to prevent excessive loading
+          order: 'date_deadline ASC' // Consistent ordering
+        }
+      ]
+    },
+    id: Date.now()
+  };
+
+  console.log('API Request Summary:', {
+    endpoint: endpoint.replace(/\/\/.*@/, '//***@'), // Hide credentials in logs
+    domainFilters: domain.length,
+    fieldCount: essentialFields.length,
+    searchTerm: searchQuery?.trim() || 'none',
+    tab: activeTab
+  });
+
+  try {
+    const startTime = Date.now();
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await response.json();
+    const requestTime = Date.now() - startTime;
+    
+    console.log(`API Response: ${requestTime}ms`, {
+      hasError: !!data.error,
+      resultCount: data.result?.length || 0
+    });
+    
+    if (data.error) {
+      console.error('Odoo API error:', data.error);
+      return [];
+    }
+    
+    const serverTasks = data.result || [];
+    
+    // Minimal client-side validation (should be redundant due to server filtering)
+    const validatedTasks = serverTasks.filter(task => {
+      // Validation should be minimal since server-side filtering is comprehensive
+      const isValid = task.id && 
+                     task.state === "01_in_progress" && 
+                     task.active !== false && 
+                     task.is_stop_maintenance === false &&
+                     task.timer_state !== "reported";
+      
+      if (!isValid) {
+        console.warn(`Task ${task.id} failed client validation:`, {
+          state: task.state,
+          active: task.active,
+          is_stop_maintenance: task.is_stop_maintenance,
+          timer_state: task.timer_state
+        });
+      }
+      
+      return isValid;
+    });
+    
+    const filteredCount = validatedTasks.length;
+    const serverCount = serverTasks.length;
+    
+    console.log('Filtering Results:', {
+      serverFiltered: serverCount,
+      clientValidated: filteredCount,
+      efficiency: `${((filteredCount/serverCount)*100).toFixed(1)}%`,
+      requestTime: `${requestTime}ms`,
+      tab: activeTab
+    });
+    
+    // Warning for inefficient filtering
+    if (serverCount > 0 && (filteredCount / serverCount) < 0.9) {
+      console.warn('⚠️ Low filtering efficiency detected. Server-side domain may need optimization.');
+    }
+    
+    return validatedTasks;
+    
+  } catch (error) {
+    console.error('Failed to fetch tasks from Odoo:', error);
+    return [];
+  }
+};
+
 const fetchPartnerDetails = async (partnerId) => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
@@ -61,183 +309,6 @@ const fetchPartnerDetails = async (partnerId) => {
   } catch (error) {
     console.error("Erreur fetchPartnerDetails:", error);
     return null;
-  }
-};
-
-export const fetchOdooTasks = async (searchQuery, activeTab) => {
-  const uid = await dbOperations.getConfig('odoo_uid');
-  const password = await dbOperations.getConfig('odoo_password');
-  const url = await dbOperations.getConfig('odoo_url');
-  const dbName = await dbOperations.getConfig('odoo_db');
-
-  console.log('Config values:', { uid, password: password ? 'EXISTS' : 'MISSING', url, dbName });
-
-  if (!uid || !password || !url || !dbName) {
-    console.log('Missing config, returning empty array');
-    return [];
-  }
-
-  let employeeId = null;
-  try {
-    const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
-    const userPayload = {
-      jsonrpc: "2.0",
-      method: "call",
-      params: {
-        service: "object",
-        method: "execute",
-        args: [
-          dbName,
-          parseInt(uid),
-          password,
-          "res.users",
-          "read",
-          [parseInt(uid)],
-          ["employee_id"] 
-        ]
-      },
-      id: Date.now()
-    };
-
-    const userResponse = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userPayload)
-    });
-    
-    const userData = await userResponse.json();
-    if (userData.result && userData.result[0] && userData.result[0].employee_id) {
-      employeeId = userData.result[0].employee_id[0]; 
-      console.log('Found employee ID:', employeeId);
-    } else {
-      console.log('No employee ID found in user data:', userData);
-    }
-  } catch (e) {
-    console.error('Failed to fetch employee ID:', e);
-  }
-
-  if (!employeeId) {
-    console.log('No employee ID found for this user');
-    return [];
-  }
-
-  let domain = [
-    ["is_stop_maintenance", "=", false],
-    ["active", "=", true], 
-    "|", 
-    "&", 
-    ["employee_id", "=", employeeId],
-    ["change_technician", "=", false],
-    "&",   
-    ["employee2_id", "=", employeeId],
-    ["change_technician", "=", true]
-  ];
-  
-  if (searchQuery && searchQuery.trim()) {
-    domain.push(["name", "ilike", searchQuery.trim()]);
-  }
-  
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split('T')[0];
-  
-  if (activeTab === 'today') {
-    domain.push(['date_deadline', '>=', todayStr]);
-    domain.push(['date_deadline', '<=', todayStr + ' 23:59:59']);
-  } else if (activeTab === 'upcoming') {
-    domain.push(['date_deadline', '>', todayStr]);
-  } else if (activeTab === 'past') {
-    domain.push(['date_deadline', '<', todayStr]);
-  }
-
-  console.log('Final search domain:', JSON.stringify(domain, null, 2));
-
-  const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
-  const payload = {
-    jsonrpc: "2.0",
-    method: "call",
-    params: {
-      service: "object",
-      method: "execute",
-      args: [
-        dbName,
-        parseInt(uid),
-        password,
-        "project.task",
-        "search_read",
-        domain,
-        [
-          "id", "name", "date_deadline", "partner_id", "date_assign", 
-          "partner_name", "stage_id", "project_id", "is_stop_maintenance", 
-          "employee_id", "employee2_id", "change_technician", "partner_phone", 
-          "partner_address_complete", "state", "timer_state"
-        ]
-      ]
-    },
-    id: Date.now()
-  };
-
-  console.log('API payload:', JSON.stringify(payload, null, 2));
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    
-    const data = await response.json();
-    console.log('API response:', data);
-    
-    if (data.error) {
-      console.error('Odoo API error:', data.error);
-      return [];
-    }
-    
-    const result = data.result || [];
-    console.log('Raw tasks from API:', result);
-  
-    const filteredTasks = result.filter(task => {
-      const isStopMaintenanceValid = task.is_stop_maintenance === false;
-      const isActiveValid = task.active !== false;
-  
-      const isEmployeeCondition1 = task.employee_id && 
-                                  task.employee_id[0] === employeeId && 
-                                  task.change_technician === false;
-      
-      const isEmployeeCondition2 = task.employee2_id && 
-                                  task.employee2_id[0] === employeeId && 
-                                  task.change_technician === true;
-      
-      const isEmployeeValid = isEmployeeCondition1 || isEmployeeCondition2;
-      
-      if (!isStopMaintenanceValid) {
-        console.log(`Task ${task.id} filtered out due to is_stop_maintenance:`, task.is_stop_maintenance);
-      }
-      if (!isEmployeeValid) {
-        console.log(`Task ${task.id} filtered out due to employee assignment:`, {
-          employee_id: task.employee_id,
-          employee2_id: task.employee2_id,
-          change_technician: task.change_technician,
-          currentEmployeeId: employeeId,
-          condition1Valid: isEmployeeCondition1,
-          condition2Valid: isEmployeeCondition2
-        });
-      }
-      if (!isActiveValid) {
-        console.log(`Task ${task.id} filtered out due to inactive status`);
-      }
-      
-      return isStopMaintenanceValid && isEmployeeValid && isActiveValid;
-    });
-    
-    console.log('Filtered tasks count:', filteredTasks.length);
-    console.log('Sample filtered task:', filteredTasks[0]);
-    
-    return filteredTasks;
-  } catch (e) {
-    console.error('Failed to fetch tasks from Odoo:', e);
-    return [];
   }
 };
 
@@ -811,7 +882,7 @@ export const getRecordNameFromOdoo = async (model, id) => {
   }
 };
 
-export const startTaskInOdoo = async (taskId) => {
+export const startTask = async (taskId, locationData = null) => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
   const url = await dbOperations.getConfig('odoo_url');
@@ -822,36 +893,19 @@ export const startTaskInOdoo = async (taskId) => {
     return { success: false, error: "Configuration Odoo manquante" };
   }
 
-  console.log('Fetching current location, time and address...');
-  const locationData = await getLocationTimeAndAddress();
-  if (!locationData) {
-    console.error('Failed to get location information');
-    return { success: false, error: "Impossible d'obtenir la localisation" };
+  // Obtenir les données de localisation si non fournies
+  let location = locationData;
+  if (!location) {
+    try {
+      location = await getLocationAndTime();
+    } catch (error) {
+      console.warn('Could not get location for task start:', error);
+      // Continuer sans localisation
+    }
   }
-
-  // FIXED: Convert timestamp to consistent format if needed
-  let formattedTimestamp = locationData.timestamp;
-  if (typeof locationData.timestamp === 'string' && locationData.timestamp.includes('T')) {
-    const date = new Date(locationData.timestamp);
-    formattedTimestamp = formatTimestampForOdoo(date);
-  } else if (typeof locationData.timestamp === 'string') {
-    // Already in correct format, but verify it doesn't have 'T'
-    formattedTimestamp = locationData.timestamp;
-  } else {
-    // If it's a Date object or invalid, format it properly
-    formattedTimestamp = formatTimestampForOdoo(new Date(locationData.timestamp));
-  }
-
-  console.log('Location details:', {
-    latitude: locationData.latitude,
-    longitude: locationData.longitude,
-    accuracy: locationData.accuracy,
-    originalTimestamp: locationData.timestamp,
-    formattedTimestamp: formattedTimestamp,
-    address: locationData.address
-  });
 
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+  const timestamp = formatTimestampForOdoo();
 
   const payload = {
     jsonrpc: "2.0",
@@ -864,17 +918,21 @@ export const startTaskInOdoo = async (taskId) => {
         parseInt(uid),
         password,
         "project.task",
-        "lance_tache",
+        "start_pool_maintenance_api",
         parseInt(taskId),
-        locationData.latitude,
-        locationData.longitude,
-        formattedTimestamp  // Use the properly formatted timestamp
+        {
+          start_time: timestamp,
+          location: location ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            address: location.address || null,
+            timestamp: location.timestamp || timestamp
+          } : null
+        }
       ]
     },
     id: Date.now()
   };
-
-  console.log('Sending start task request with payload:', JSON.stringify(payload, null, 2));
 
   try {
     const response = await fetch(endpoint, {
@@ -884,236 +942,281 @@ export const startTaskInOdoo = async (taskId) => {
     });
 
     const data = await response.json();
-    console.log('Start task API response:', JSON.stringify(data, null, 2));
+    console.log('Start task API response:', data);
     
     if (data.error) {
       console.error('Start task API error:', data.error);
-      return { success: false, error: data.error.data?.message || data.error.message || 'Erreur inconnue' };
+      return { success: false, error: data.error };
     }
     
-    console.log('Fetching updated task information to verify timer_state...');
-    const updatedTask = await fetchTaskById(taskId);
-    console.log('Updated task details:', {
-      timer_state: updatedTask?.timer_state,
-      location: updatedTask ? {
-        latitude: updatedTask.x_latitude,
-        longitude: updatedTask.x_longitude,
-        timestamp: updatedTask.x_start_date
-      } : null
-    });
-    
-    return { 
-      success: data.result === true,
-      result: data.result,
-      message: data.result ? 'Tâche lancée avec succès' : 'Impossible de lancer la tâche',
-      timer_state: updatedTask?.timer_state,
-      location: {
-        latitude: locationData.latitude,
-        longitude: locationData.longitude,
-        timestamp: formattedTimestamp,  // Use the formatted timestamp
-        address: locationData.address
-      }
-    };
+    return data.result || { success: true, message: "Tâche démarrée avec succès" };
   } catch (error) {
-    console.error("Erreur startTaskInOdoo:", {
-      error: error.message,
-      stack: error.stack
-    });
+    console.error("Erreur startTask:", error);
     return { success: false, error: "Erreur de connexion" };
   }
 };
 
-export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, includeAddress = true) => {
+// Fonction optimisée pour récupérer les tâches démarrées (state = "start")
+export const fetchStartedTasks = async (searchQuery = "", activeTab = "today") => {
   const uid = await dbOperations.getConfig('odoo_uid');
   const password = await dbOperations.getConfig('odoo_password');
   const url = await dbOperations.getConfig('odoo_url');
   const dbName = await dbOperations.getConfig('odoo_db');
 
-  if (!uid || !password || !url || !dbName) {
-    console.log('Missing Odoo configuration');
-    return { success: false, error: "Configuration Odoo manquante" };
-  }
-
-  // ENHANCED: Get current task data first to validate dates
-  console.log('Fetching current task data to validate dates...');
-  const currentTask = await fetchTaskById(taskId);
-  if (!currentTask) {
-    console.error('Could not fetch current task data');
-    return { success: false, error: "Impossible de récupérer les données de la tâche" };
-  }
-
-  // ENHANCED: Format the timestamp and validate against current task dates
-  let formattedEndDateTime = endDateTime;
-  
-  // If endDateTime is a Date object, format it
-  if (endDateTime instanceof Date) {
-    formattedEndDateTime = formatTimestampForOdoo(endDateTime);
-  }
-  // If endDateTime is an ISO string (contains 'T'), convert it
-  else if (typeof endDateTime === 'string' && endDateTime.includes('T')) {
-    const date = new Date(endDateTime);
-    formattedEndDateTime = formatTimestampForOdoo(date);
-  }
-  // If no endDateTime provided, use current time
-  else if (!endDateTime) {
-    formattedEndDateTime = formatTimestampForOdoo();
-  }
-
-  console.log('Task validation details:', {
-    taskId: taskId,
-    originalEndDateTime: endDateTime,
-    formattedEndDateTime: formattedEndDateTime,
-    currentTaskStartDate: currentTask.date_assign,
-    currentTaskDeadline: currentTask.date_deadline,
-    timerState: currentTask.timer_state
+  console.log('Config validation for started tasks:', { 
+    uid: !!uid, 
+    password: !!password, 
+    url: !!url, 
+    dbName: !!dbName 
   });
 
-  // ENHANCED: Validate that end time is not before start time
-  if (currentTask.date_assign) {
-    const taskStartDate = new Date(currentTask.date_assign);
-    const taskEndDate = new Date(formattedEndDateTime);
-    
-    if (taskEndDate < taskStartDate) {
-      console.warn('End date is before start date, adjusting...');
-      // Adjust end date to be at least 1 minute after start date
-      const adjustedEndDate = new Date(taskStartDate.getTime() + 60000); // Add 1 minute
-      formattedEndDateTime = formatTimestampForOdoo(adjustedEndDate);
-      console.log('Adjusted end date to:', formattedEndDateTime);
-    }
+  if (!uid || !password || !url || !dbName) {
+    console.log('Missing config, returning empty array');
+    return [];
   }
 
-  let address = false;
-  
-  if (includeAddress && latitude && longitude) {
-    console.log('Getting address from coordinates...');
-    try {
-      address = await reverseGeocode(latitude, longitude);
-      console.log('Reverse geocoded address:', address);
-    } catch (geocodeError) {
-      console.warn('Geocoding failed, continuing without address:', geocodeError);
-      address = false;
-    }
+  // Get employee ID with caching
+  const employeeId = await getEmployeeId();
+  if (!employeeId) {
+    console.log('No employee ID found for this user');
+    return [];
   }
+
+  // Build optimized domain for server-side filtering
+  const serverDomain = buildServerOptimizedDomain(employeeId, searchQuery, activeTab);
+  
+  console.log('Server-side domain filters for started tasks:', {
+    activeTab,
+    searchQuery: searchQuery?.trim() || 'none',
+    employeeId,
+    domainLength: serverDomain.length
+  });
 
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+  
+  // Optimized field selection for started tasks
+  const essentialFields = [
+    "id", "name", "date_deadline", "partner_id", "partner_name", 
+    "partner_phone", "partner_address_complete", "employee_id", 
+    "employee2_id", "change_technician", "state", "timer_state", 
+    "is_stop_maintenance", "active", "stage_id", "project_id",
+    "start_time", "location_data" // Additional fields for started tasks
+  ];
 
-  // ENHANCED: Add more detailed logging and error handling
   const payload = {
     jsonrpc: "2.0",
     method: "call",
     params: {
       service: "object",
-      method: "execute",
+      method: "search_read",
       args: [
         dbName,
         parseInt(uid),
         password,
-        "project.task",           
-        "stop_tache",             
-        parseInt(taskId),
-        parseFloat(latitude) || 0.0,  // Ensure proper number format
-        parseFloat(longitude) || 0.0, // Ensure proper number format
-        formattedEndDateTime,
-        address || false  
+        "project.task",
+        serverDomain,
+        essentialFields,
+        {
+          limit: 1000,
+          order: 'date_deadline ASC'
+        }
       ]
     },
     id: Date.now()
   };
 
-  console.log('Stopping task with payload:', JSON.stringify(payload, null, 2));
+  console.log('Started tasks API Request Summary:', {
+    endpoint: endpoint.replace(/\/\/.*@/, '//***@'),
+    domainFilters: serverDomain.length,
+    fieldCount: essentialFields.length,
+    searchTerm: searchQuery?.trim() || 'none',
+    tab: activeTab
+  });
 
   try {
+    const startTime = Date.now();
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
     });
-
-    if (!response.ok) {
-      console.error('HTTP error:', response.status, response.statusText);
-      return { 
-        success: false, 
-        error: `Erreur HTTP: ${response.status} ${response.statusText}` 
-      };
-    }
-
-    const data = await response.json();
-    console.log('stop_tache API response:', JSON.stringify(data, null, 2));
-
-    if (data.error) {
-      console.error('Erreur stop_tache:', data.error);
-      
-      // ENHANCED: Handle specific validation errors
-      let errorMessage = data.error.data?.message || data.error.message || 'Erreur inconnue';
-      
-      // If it's a date validation error, provide more helpful message
-      if (errorMessage.includes('planned start date must be before') || 
-          errorMessage.includes('planned_dates_check')) {
-        errorMessage = "Erreur de validation des dates. Veuillez réessayer dans quelques secondes.";
-        
-        // Optionally, try again with current timestamp
-        console.log('Date validation error detected, retrying with current timestamp...');
-        const retryEndDateTime = formatTimestampForOdoo();
-        
-        const retryPayload = {
-          ...payload,
-          params: {
-            ...payload.params,
-            args: [
-              ...payload.params.args.slice(0, -2), // Keep all args except timestamp and address
-              retryEndDateTime,
-              address || false
-            ]
-          }
-        };
-        
-        console.log('Retrying with payload:', JSON.stringify(retryPayload, null, 2));
-        
-        try {
-          const retryResponse = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(retryPayload),
-          });
-          
-          const retryData = await retryResponse.json();
-          console.log('Retry response:', retryData);
-          
-          if (!retryData.error && retryData.result) {
-            return { 
-              success: true, 
-              result: retryData.result,
-              address: address || 'Adresse non disponible',
-              timestamp: retryEndDateTime,
-              retried: true
-            };
-          }
-        } catch (retryError) {
-          console.error('Retry also failed:', retryError);
-        }
-      }
-      
-      return { 
-        success: false, 
-        error: errorMessage,
-        fullError: data.error 
-      };
-    }
-
-    console.log('Résultat stop_tache:', data);
     
-    return { 
-      success: true, 
-      result: data.result,
-      address: address || 'Adresse non disponible',
-      timestamp: formattedEndDateTime
-    };
+    const data = await response.json();
+    const requestTime = Date.now() - startTime;
+    
+    console.log(`Started Tasks API Response: ${requestTime}ms`, {
+      hasError: !!data.error,
+      resultCount: data.result?.length || 0
+    });
+    
+    if (data.error) {
+      console.error('Odoo API error for started tasks:', data.error);
+      return [];
+    }
+    
+    const serverTasks = data.result || [];
+    
+    // Client-side filtering for started tasks (state = "start")
+    const clientFilteredTasks = applyClientSideFiltering(serverTasks, employeeId);
+    
+    const filteredCount = clientFilteredTasks.length;
+    const serverCount = serverTasks.length;
+    
+    console.log('Started Tasks Filtering Results:', {
+      serverFiltered: serverCount,
+      clientFiltered: filteredCount,
+      efficiency: `${((filteredCount/serverCount)*100).toFixed(1)}%`,
+      requestTime: `${requestTime}ms`,
+      tab: activeTab
+    });
+    
+    // Warning for inefficient filtering
+    if (serverCount > 0 && (filteredCount / serverCount) < 0.8) {
+      console.warn('⚠️ Low filtering efficiency for started tasks. Consider optimizing server-side domain.');
+    }
+    
+    return clientFilteredTasks;
+    
   } catch (error) {
-    console.error("Erreur réseau stopTacheInOdoo:", error);
-    return { 
-      success: false, 
-      error: `Erreur de connexion: ${error.message}`,
-      fullError: error 
-    };
+    console.error('Failed to fetch started tasks from Odoo:', error);
+    return [];
   }
+};
+
+// Domain builder optimisé pour le filtrage côté serveur
+const buildServerOptimizedDomain = (employeeId, searchQuery, activeTab) => {
+  const domain = [
+    // Filtrage côté serveur - conditions les plus restrictives en premier
+    ["is_stop_maintenance", "=", false],
+    ["active", "=", true], 
+    ["state", "=", "01_in_progress"],
+    ["timer_state", "!=", "reported"]
+  ];
+  
+  // Date filtering - precise and server-side optimized
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+  todayEnd.setMilliseconds(-1);
+  
+  const todayStartStr = todayStart.toISOString().split('T')[0] + ' 00:00:00';
+  const todayEndStr = todayEnd.toISOString().split('T')[0] + ' 23:59:59';
+  
+  if (activeTab === 'today') {
+    domain.push(['date_deadline', '>=', todayStartStr]);
+    domain.push(['date_deadline', '<=', todayEndStr]);
+  } else if (activeTab === 'upcoming') {
+    domain.push(['date_deadline', '>', todayEndStr]);
+  } else if (activeTab === 'past') {
+    domain.push(['date_deadline', '<', todayStartStr]);
+  }
+  
+  // Search query filtering
+  if (searchQuery && searchQuery.trim().length > 0) {
+    const trimmedQuery = searchQuery.trim();
+    domain.push("|");
+    domain.push(["name", "ilike", trimmedQuery]);
+    domain.push(["partner_name", "ilike", trimmedQuery]);
+  }
+  
+  return domain;
+};
+
+// Filtrage côté client pour minimiser les loadings excessifs
+const applyClientSideFiltering = (tasks, employeeId) => {
+  return tasks.filter(task => {
+    // Filtrage côté client pour les tâches démarrées (state = "start")
+    const isStartedTask = task.timer_state === "start";
+    
+    // Vérification de l'assignation du technicien
+    const isAssignedToTechnician = (
+      // Cas 1: employee_id correspond et change_technician = false
+      (task.employee_id && 
+       task.employee_id[0] === employeeId && 
+       task.change_technician === false) ||
+      // Cas 2: employee2_id correspond et change_technician = true
+      (task.employee2_id && 
+       task.employee2_id[0] === employeeId && 
+       task.change_technician === true)
+    );
+    
+    const isValid = isStartedTask && isAssignedToTechnician;
+    
+    if (!isValid) {
+      console.log(`Task ${task.id} filtered out on client side:`, {
+        timer_state: task.timer_state,
+        isStartedTask,
+        employee_id: task.employee_id?.[0],
+        employee2_id: task.employee2_id?.[0],
+        change_technician: task.change_technician,
+        isAssignedToTechnician,
+        targetEmployeeId: employeeId
+      });
+    }
+    
+    return isValid;
+  });
+};
+
+// Fonction pour démarrer une tâche avec validation préalable
+export const startTaskWithValidation = async (taskId) => {
+  console.log('Starting task with validation:', taskId);
+  
+  // Valider que la tâche peut être démarrée
+  const task = await fetchTaskById(taskId);
+  if (!task) {
+    return { success: false, error: "Tâche introuvable" };
+  }
+  
+  // Vérifier l'état de la tâche
+  if (task.timer_state === "start") {
+    return { success: false, error: "La tâche est déjà démarrée" };
+  }
+  
+  if (task.timer_state === "reported") {
+    return { success: false, error: "La tâche est déjà terminée" };
+  }
+  
+  if (task.is_stop_maintenance === true) {
+    return { success: false, error: "La maintenance est arrêtée pour cette tâche" };
+  }
+  
+  // Obtenir la localisation
+  let locationData = null;
+  try {
+    locationData = await getLocationTimeAndAddress();
+    console.log('Location obtained for task start:', locationData);
+  } catch (error) {
+    console.warn('Could not get location, continuing without:', error);
+  }
+  
+  // Démarrer la tâche
+  return await startTask(taskId, locationData);
+};
+
+// Fonction utilitaire pour vérifier si une tâche peut être démarrée
+export const canStartTask = (task, employeeId) => {
+  if (!task || !employeeId) return false;
+  
+  // Vérifications de base
+  if (task.timer_state === "start" || 
+      task.timer_state === "reported" ||
+      task.is_stop_maintenance === true ||
+      task.active === false ||
+      task.state !== "01_in_progress") {
+    return false;
+  }
+  
+  // Vérification de l'assignation du technicien
+  const isAssignedToTechnician = (
+    (task.employee_id && 
+     task.employee_id[0] === employeeId && 
+     task.change_technician === false) ||
+    (task.employee2_id && 
+     task.employee2_id[0] === employeeId && 
+     task.change_technician === true)
+  );
+  
+  return isAssignedToTechnician;
 };
