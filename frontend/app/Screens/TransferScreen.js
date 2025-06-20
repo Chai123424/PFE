@@ -16,6 +16,8 @@ const TransferApp = () => {
   const params = useLocalSearchParams();
   const taskId = params.taskId || params.appointmentId || params.id;
   const router = useRouter();
+  const category = params.category || 'today'; // Récupérez la catégorie
+
 
   useEffect(() => {
     console.log('TransferApp params:', params);
@@ -82,12 +84,13 @@ const TransferApp = () => {
                   result.message || 'Technicien secondaire modifié avec succès',
                   [{
                     text: 'OK',
-                    onPress: () => router.replace({
+                    onPress: () => router.push({
                       pathname: '/Screens/HomeScreen',
                       params: {
                         refresh: Date.now().toString(),
                         transferredTaskId: taskId,
-                        newSecondaryTech: selectedTech
+                        newSecondaryTech: selectedTech,
+                        category: category
                       },
                     }),
                   }]

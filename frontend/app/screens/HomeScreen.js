@@ -169,19 +169,23 @@ export default function HomeScreen() {
     }, [fetchAndStoreTasks, isConnected])
   );
 
+  // In HomeScreen.js - Replace the handleAppointmentPress function
+
   const handleAppointmentPress = (id) => {
-  if (!isConnected) {
-    return; 
-  }
-  
-  const task = tasks.find(t => t.id === id);
-  
-  if (task && task.timer_state === "start" && task.is_stop_maintenance === false) {
-    router.push(`./InfoScreen?id=${id}&category=${activeTab}&status=ongoing`);
-  } else {
-    router.push(`/DetailScreen?id=${id}&category=${activeTab}`);
-  }
-};
+    if (!isConnected) {
+      return; 
+    }
+    
+    const task = tasks.find(t => t.id === id);
+    
+    if (task && task.timer_state === "start" && task.is_stop_maintenance === false) {
+      // Pass the current activeTab to maintain navigation context
+      router.push(`./InfoScreen?id=${id}&category=${activeTab}&status=ongoing`);
+    } else {
+      // Pass the current activeTab to maintain navigation context
+      router.push(`/DetailScreen?id=${id}&category=${activeTab}`);
+    }
+  };
 
   const renderContent = () => {
     

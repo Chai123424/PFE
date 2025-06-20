@@ -8,12 +8,7 @@ export default function ConfirmationScreen() {
   const { id } = useLocalSearchParams(); 
 
   const handleOKPress = () => {
-    if (id) {
-      
-      router.replace('/');
-    } else {
-      router.replace('/');
-    }
+    router.dismissAll();
   };
 
   return (

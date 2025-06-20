@@ -165,6 +165,7 @@ export default function DetailScreen() {
     setReportModalVisible(true);
   };
 
+
   const handleConfirmReport = async () => {
     setIsReporting(true);
     
@@ -179,11 +180,7 @@ export default function DetailScreen() {
             {
               text: "OK",
               onPress: () => {
-                // Navigate back to home - the task is already updated in Odoo
-                router.replace({
-                  pathname: "/",
-                  params: { category: currentAppointmentCategory },
-                });
+                router.back();
               }
             }
           ]
@@ -209,7 +206,10 @@ export default function DetailScreen() {
   const handleTransfer = () => {
     router.push({
       pathname: "/Screens/TransferScreen",
-      params: { taskId: appointment.id },
+      params: { 
+        taskId: appointment.id,
+        category: currentAppointmentCategory 
+      }
     });
   };
 
