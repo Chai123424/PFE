@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Alert, TextInput, Modal, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Alert, TextInput, Modal, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -166,11 +166,6 @@ export default function DetailScreen() {
   };
 
   const handleConfirmReport = async () => {
-    if (!reportDescription.trim()) {
-      Alert.alert("Erreur", "Veuillez saisir une description pour le signalement.");
-      return;
-    }
-
     setIsReporting(true);
     
     try {
@@ -258,44 +253,54 @@ export default function DetailScreen() {
         onRequestClose={handleCancelReport}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Signaler la tâche</Text>
-            <Text style={styles.modalSubtitle}>
-              Veuillez expliquer pourquoi cette tâche doit être reportée :
-            </Text>
-            
-            <TextInput
-              style={styles.textInput}
-              multiline={true}
-              numberOfLines={4}
-              placeholder=""
-              value={reportDescription}
-              onChangeText={setReportDescription}
-              textAlignVertical="top"
-            />
-            
-            <View style={styles.modalButtonContainer}>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.cancelButton]} 
-                onPress={handleCancelReport}
-                disabled={isReporting}
-              >
-                <Text style={styles.cancelButtonText}>Annuler</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.confirmButton]} 
-                onPress={handleConfirmReport}
-                disabled={isReporting || !reportDescription.trim()}
-              >
-                {isReporting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.confirmButtonText}>Signaler</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+            style={styles.keyboardAvoidingView}
+          >
+            <ScrollView 
+              contentContainerStyle={styles.scrollViewContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.modalContainer}>
+                <Text style={styles.modalTitle}>Signaler la tâche</Text>
+                <Text style={styles.modalSubtitle}>
+                  Veuillez expliquer pourquoi cette tâche doit être reportée :
+                </Text>
+                
+                <TextInput
+                  style={styles.textInput}
+                  multiline={true}
+                  numberOfLines={4}
+                  placeholder=""
+                  value={reportDescription}
+                  onChangeText={setReportDescription}
+                  textAlignVertical="top"
+                />
+                
+                <View style={styles.modalButtonContainer}>
+                  <TouchableOpacity 
+                    style={[styles.modalButton, styles.cancelButton]} 
+                    onPress={handleCancelReport}
+                    disabled={isReporting}
+                  >
+                    <Text style={styles.cancelButtonText}>Annuler</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.modalButton, styles.confirmButton]} 
+                    onPress={handleConfirmReport}
+                    disabled={isReporting}
+                  >
+                    {isReporting ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.confirmButtonText}>Signaler</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -357,8 +362,16 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  scrollViewContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 20,
   },
   modalContainer: {
     backgroundColor: 'white',
