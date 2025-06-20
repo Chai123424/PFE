@@ -4,11 +4,13 @@ export default function AppointmentCard({ appointment, onPress }) {
   const getStatusColor = (status) => {
     switch (status) {
       case "En cours":
-        return "#4CAF50"; // Green
+      case "en cours": 
+        return "#d62c1a"; 
       case "Terminé":
-        return "#52AFD4"; // Bleu du thème
+        return "#52AFD4"; 
       case "À faire":
-        return "#FFC107"; // Yellow/Amber
+      case "à faire": 
+        return "#FFC107"; 
       default:
         return "#FFC107";
     }
@@ -26,6 +28,8 @@ export default function AppointmentCard({ appointment, onPress }) {
       year: 'numeric'
     });
   };
+
+  const statusColor = appointment.statusColor || getStatusColor(appointment.status);
 
   return (
     <TouchableOpacity 
@@ -56,7 +60,7 @@ export default function AppointmentCard({ appointment, onPress }) {
         <Text style={styles.appointmentTime}>
           {appointment.time || " "}
         </Text>
-        <View style={[styles.statusPill, { backgroundColor: getStatusColor(appointment.status) }]}> 
+        <View style={[styles.statusPill, { backgroundColor: statusColor }]}> 
           <Text style={styles.statusText}>{appointment.status || "À faire"}</Text>
         </View>
       </View>

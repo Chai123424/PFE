@@ -2,7 +2,7 @@
 
 import { View, StyleSheet, TouchableOpacity, Text } from "react-native"
 import { useRouter } from "expo-router"
-import { fetchOdooTasks } from "../utils/odooApi" // Import your Odoo fetch function
+import { fetchOdooTasks } from "../utils/odooApi" 
 import { useEffect, useState } from "react"
 
 export default function NavigationArrows({ currentId, category }) {
@@ -10,7 +10,6 @@ export default function NavigationArrows({ currentId, category }) {
   const [filteredAppointments, setFilteredAppointments] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Apply the same filtering logic as HomeScreen
   const transformAndFilterTasks = (tasks) => {
     if (!tasks || !Array.isArray(tasks)) return [];
     
@@ -44,12 +43,12 @@ export default function NavigationArrows({ currentId, category }) {
       }));
   };
 
-  // Fetch appointments from Odoo based on category and apply filtering
+  
   useEffect(() => {
     async function loadAppointments() {
       setLoading(true)
       try {
-        const tasks = await fetchOdooTasks("", category) // Empty search query, filter by category
+        const tasks = await fetchOdooTasks("", category) 
         const filtered = transformAndFilterTasks(tasks)
         setFilteredAppointments(filtered)
       } catch (error) {
@@ -61,11 +60,8 @@ export default function NavigationArrows({ currentId, category }) {
     }
     loadAppointments()
   }, [category])
-
-  // Find current index in the filtered appointments
   const currentIndex = filteredAppointments.findIndex(app => app.id === parseInt(currentId))
 
-  // Determine previous/next IDs
   const prevId = currentIndex > 0 ? filteredAppointments[currentIndex - 1].id : null
   const nextId = currentIndex < filteredAppointments.length - 1 ? filteredAppointments[currentIndex + 1].id : null
 
@@ -73,7 +69,6 @@ export default function NavigationArrows({ currentId, category }) {
     return <View style={styles.container}><Text>Loading...</Text></View>
   }
 
-  // Don't render if there's only one or no tasks
   if (filteredAppointments.length <= 1) {
     return null
   }

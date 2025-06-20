@@ -154,14 +154,14 @@ export default function ProfileInfoScreen({ navigation }) {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#3333CC" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>informations</Text>
+        
         <View style={styles.placeholder} />
       </View>
 
-      {/* Profile Name */}
+      
       <Text style={styles.profileName}>{patientName || "Chargement..."}</Text>
 
-      {/* Before Section */}
+      
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Avant: </Text>
         <TouchableOpacity style={styles.imageContainer} onPress={() => handleImagePress("before")}>
@@ -183,7 +183,7 @@ export default function ProfileInfoScreen({ navigation }) {
         )}
       </View>
 
-      {/* After Section */}
+      
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Après: </Text>
         <TouchableOpacity style={styles.imageContainer} onPress={() => handleImagePress("after")}>
@@ -205,9 +205,9 @@ export default function ProfileInfoScreen({ navigation }) {
         )}
       </View>
 
-      {/* Action Buttons */}
+      
       <View style={styles.actionContainer}>
-        {/* Save to Odoo Button */}
+        
         <TouchableOpacity 
           style={[styles.saveButton, (isLoading || !netInfo.isConnected) && styles.disabledButton]} 
           onPress={handleSaveToOdoo}

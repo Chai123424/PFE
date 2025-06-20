@@ -25,13 +25,13 @@ export default function HomeScreen() {
   const [isConnected, setIsConnected] = useState(true);
   const [networkError, setNetworkError] = useState(false);
 
-  // Surveillance de la connexion réseau
+  
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       console.log('Network state:', state);
       setIsConnected(state.isConnected);
       
-      // Si la connexion revient, recharger les données
+      
       if (state.isConnected && !isConnected) {
         setNetworkError(false);
         fetchUserInfo();
@@ -39,7 +39,7 @@ export default function HomeScreen() {
       }
     });
 
-    // Vérification initiale de la connexion
+    
     NetInfo.fetch().then(state => {
       setIsConnected(state.isConnected);
     });
@@ -48,15 +48,25 @@ export default function HomeScreen() {
   }, [isConnected]);
 
   const transformTasksToAppointments = useCallback((tasks) => {
-    if (!tasks || !Array.isArray(tasks)) return [];
-    
-    return tasks
-      .filter(task => 
-        task.is_stop_maintenance === false && 
-        task.state === "01_in_progress" &&
-        task.timer_state !== "reported" 
-      )
-      .map(task => ({
+  if (!tasks || !Array.isArray(tasks)) return [];
+  
+  return tasks
+    .filter(task => 
+      task.is_stop_maintenance === false && 
+      task.state === "01_in_progress" &&
+      task.timer_state !== "reported" 
+    )
+    .map(task => {
+      
+      let status = "à faire"; 
+      let statusColor = "#FFC107"; 
+      
+      if (task.timer_state === "start" && task.is_stop_maintenance === false) {
+        status = "en cours";
+        statusColor = "#d62c1a"; 
+      }
+      
+      return {
         id: task.id,
         clientName: task.partner_name || (task.partner_id?.[1]) || 'Client',
         referenceAndDescription: task.name || 'Unnamed Task',
@@ -67,7 +77,8 @@ export default function HomeScreen() {
               minute: '2-digit' 
             }) 
           : "--:--",
-        status: "à faire",
+        status: status,
+        statusColor: statusColor,
         date_deadline: task.date_deadline,
         formattedDate: task.date_deadline 
           ? new Date(task.date_deadline).toLocaleDateString('fr-FR', {
@@ -77,9 +88,9 @@ export default function HomeScreen() {
             }) 
           : null,
         is_stop_maintenance: task.is_stop_maintenance || false,
-      }));
-  }, []);
-
+      };
+    });
+}, []);
   const fetchUserInfo = useCallback(async () => {
     if (!isConnected) {
       setUsername("Hors ligne");
@@ -159,14 +170,21 @@ export default function HomeScreen() {
   );
 
   const handleAppointmentPress = (id) => {
-    if (!isConnected) {
-      return; // Ne pas naviguer si pas de connexion
-    }
+  if (!isConnected) {
+    return; 
+  }
+  
+  const task = tasks.find(t => t.id === id);
+  
+  if (task && task.timer_state === "start" && task.is_stop_maintenance === false) {
+    router.push(`./InfoScreen?id=${id}&category=${activeTab}&status=ongoing`);
+  } else {
     router.push(`/DetailScreen?id=${id}&category=${activeTab}`);
-  };
+  }
+};
 
   const renderContent = () => {
-    // Pas de connexion internet
+    
     if (!isConnected) {
       return (
         <View style={styles.noConnectionContainer}>
@@ -178,7 +196,6 @@ export default function HomeScreen() {
       );
     }
 
-    // Chargement en cours
     if (loading) {
       return (
         <View style={styles.loadingContainer}>
@@ -188,7 +205,6 @@ export default function HomeScreen() {
       );
     }
 
-    // Erreur réseau pendant le chargement
     if (networkError) {
       return (
         <View style={styles.errorContainer}>
@@ -200,7 +216,6 @@ export default function HomeScreen() {
       );
     }
 
-    // Liste des tâches
     return (
       <FlatList
         data={filteredAppointments}
