@@ -5,11 +5,11 @@ export default function BottomNavigation({ activeTab, onTabChange }) {
   return (
     <View style={styles.bottomNav}>
       <TouchableOpacity 
-        style={[styles.navButton, activeTab === "past" && styles.activeNavButton]}
-        onPress={() => onTabChange("past")}
+        style={[styles.navButton, activeTab === "previous" && styles.activeNavButton]}
+        onPress={() => onTabChange("previous")}
       >
         <ChevronLeft size={18} color="#fff" />
-        <Text style={activeTab === "past" ? styles.activeNavText : styles.navText}>Passées</Text>
+        <Text style={activeTab === "previous" ? styles.activeNavText : styles.navText}>Passées</Text>
       </TouchableOpacity>
       <TouchableOpacity 
         style={[styles.navButton, activeTab === "today" && styles.activeNavButton]}

@@ -25,12 +25,24 @@ export default function HomeScreen() {
   const [isConnected, setIsConnected] = useState(true);
   const [networkError, setNetworkError] = useState(false);
 
-  
+  // Date utility functions
+  const normalizeDate = (dateString) => {
+    if (!dateString) return null;
+    
+    // Create date in local timezone and normalize to start of day
+    const date = new Date(dateString);
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  };
+
+  const getTodayNormalized = () => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  };
+
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       console.log('Network state:', state);
       setIsConnected(state.isConnected);
-      
       
       if (state.isConnected && !isConnected) {
         setNetworkError(false);
@@ -39,7 +51,6 @@ export default function HomeScreen() {
       }
     });
 
-    
     NetInfo.fetch().then(state => {
       setIsConnected(state.isConnected);
     });
@@ -48,49 +59,74 @@ export default function HomeScreen() {
   }, [isConnected]);
 
   const transformTasksToAppointments = useCallback((tasks) => {
-  if (!tasks || !Array.isArray(tasks)) return [];
-  
-  return tasks
-    .filter(task => 
-      task.is_stop_maintenance === false && 
-      task.state === "01_in_progress" &&
-      task.timer_state !== "reported" 
-    )
-    .map(task => {
-      
-      let status = "à faire"; 
-      let statusColor = "#FFC107"; 
-      
-      if (task.timer_state === "start" && task.is_stop_maintenance === false) {
-        status = "en cours";
-        statusColor = "#d62c1a"; 
-      }
-      
-      return {
-        id: task.id,
-        clientName: task.partner_name || (task.partner_id?.[1]) || 'Client',
-        referenceAndDescription: task.name || 'Unnamed Task',
-        type: task.project_id?.[1] || 'Task',
-        time: task.date_deadline 
-          ? new Date(task.date_deadline).toLocaleTimeString('fr-FR', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            }) 
-          : "--:--",
-        status: status,
-        statusColor: statusColor,
-        date_deadline: task.date_deadline,
-        formattedDate: task.date_deadline 
-          ? new Date(task.date_deadline).toLocaleDateString('fr-FR', {
-              day: '2-digit',
-              month: '2-digit', 
-              year: 'numeric'
-            }) 
-          : null,
-        is_stop_maintenance: task.is_stop_maintenance || false,
-      };
-    });
-}, []);
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    const today = getTodayNormalized();
+    
+    return tasks
+      .filter(task => {
+        // First filter by task state
+        const isValidTask = task.is_stop_maintenance === false && 
+                           task.state === "01_in_progress" &&
+                           task.timer_state !== "reported";
+        
+        if (!isValidTask) return false;
+        
+        // Then filter by date based on activeTab
+        if (!task.date_deadline) return false; // Exclude tasks without dates
+        
+        const taskDate = normalizeDate(task.date_deadline);
+        if (!taskDate) return activeTab === "today";
+        
+        const timeDiff = taskDate.getTime() - today.getTime();
+        const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+        
+        switch (activeTab) {
+          case "previous":
+            return daysDiff < 0;
+          case "today":
+            return daysDiff === 0;
+          case "upcoming":
+            return daysDiff > 0;
+          default:
+            return true;
+        }
+      })
+      .map(task => {
+        let status = "à faire"; 
+        let statusColor = "#FFC107"; 
+        
+        if (task.timer_state === "start" && task.is_stop_maintenance === false) {
+          status = "en cours";
+          statusColor = "#d62c1a"; 
+        }
+        
+        return {
+          id: task.id,
+          clientName: task.partner_name || (task.partner_id?.[1]) || 'Client',
+          referenceAndDescription: task.name || 'Unnamed Task',
+          type: task.project_id?.[1] || 'Task',
+          time: task.date_deadline 
+            ? new Date(task.date_deadline).toLocaleTimeString('fr-FR', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              }) 
+            : "--:--",
+          status: status,
+          statusColor: statusColor,
+          date_deadline: task.date_deadline,
+          formattedDate: task.date_deadline 
+            ? new Date(task.date_deadline).toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit', 
+                year: 'numeric'
+              }) 
+            : null,
+          is_stop_maintenance: task.is_stop_maintenance || false,
+        };
+      });
+  }, [activeTab]);
+
   const fetchUserInfo = useCallback(async () => {
     if (!isConnected) {
       setUsername("Hors ligne");
@@ -118,7 +154,8 @@ export default function HomeScreen() {
 
     setLoading(true);
     try {
-      const tasks = await fetchOdooTasks("", activeTab);
+      // Remove the activeTab parameter from fetchOdooTasks - get all tasks
+      const tasks = await fetchOdooTasks("");
       setTasks(tasks);
       const transformed = transformTasksToAppointments(tasks);
       setFilteredAppointments(transformed);
@@ -131,7 +168,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, transformTasksToAppointments, isConnected]);
+  }, [transformTasksToAppointments, isConnected]);
 
   const applySearchFilter = useCallback(() => {
     if (!tasks.length) return;
@@ -169,8 +206,6 @@ export default function HomeScreen() {
     }, [fetchAndStoreTasks, isConnected])
   );
 
-  // In HomeScreen.js - Replace the handleAppointmentPress function
-
   const handleAppointmentPress = (id) => {
     if (!isConnected) {
       return; 
@@ -188,7 +223,6 @@ export default function HomeScreen() {
   };
 
   const renderContent = () => {
-    
     if (!isConnected) {
       return (
         <View style={styles.noConnectionContainer}>
