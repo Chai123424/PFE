@@ -1,5 +1,4 @@
 "use client"
-
 import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native"
 import { ArrowLeft } from "lucide-react-native"
 import { useRouter } from "expo-router"
@@ -7,18 +6,26 @@ import { useRouter } from "expo-router"
 export default function DetailHeader({ title, category, onSharePress }) {
   const router = useRouter()
 
+  const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back()
+    } 
+  }
+
   return (
-    <View style={styles.header}>
-       <TouchableOpacity 
-      onPress={() => router.replace({ pathname: '/', params: { category: category } })}
-      style={styles.backButton}
-    >
-      <ArrowLeft size={24} color="#1f3493" />
-    </TouchableOpacity>
+    <View style={styles.header}> 
+      <TouchableOpacity
+        onPress={handleBackPress}
+        style={styles.backButton}
+      >
+        <ArrowLeft size={24} color="#1f3493" />
+      </TouchableOpacity>
+      
       <Text style={styles.headerTitle}>{title}</Text>
+      
       <TouchableOpacity style={styles.shareButton} onPress={onSharePress}>
         <Image 
-          source={require('../assets/partager (2).png')}
+          source={require('../assets/partager (2).png')} 
           style={styles.shareIconImage}
         />
       </TouchableOpacity>
