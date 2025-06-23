@@ -16,7 +16,7 @@ const TransferApp = () => {
   const params = useLocalSearchParams();
   const taskId = params.taskId || params.appointmentId || params.id;
   const router = useRouter();
-  const category = params.category || 'today'; // Récupérez la catégorie
+  const category = params.category || 'today'; 
 
 
   useEffect(() => {

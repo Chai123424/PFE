@@ -75,7 +75,7 @@ export default function NavigationArrows({ currentId, category }) {
 
   return (
     <View style={styles.container}>
-      {/* Previous Button */}
+      
       {prevId ? (
         <TouchableOpacity 
           onPress={() => router.push({

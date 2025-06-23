@@ -4,12 +4,11 @@ import { View, Text, StyleSheet } from "react-native";
 const getOdooValue = (field) => {
   if (!field) return "N/A";
 
-  // Cas d'un champ many2one : [id, nom]
+  
   if (Array.isArray(field) && field.length >= 2) {
     return field[1];
   }
 
-  // Cas d'une chaîne ou nombre simple
   if (typeof field === "string" || typeof field === "number") {
     return field.toString();
   }
@@ -52,7 +51,7 @@ export default function DetailCard({ appointment, partner }) {
 
   return (
     <View style={styles.detailsCard}>
-      {/* Numéro - nom ou ID appointment */}
+      
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Numéro :</Text>
         <Text style={styles.detailValue}>
@@ -60,13 +59,12 @@ export default function DetailCard({ appointment, partner }) {
         </Text>
       </View>
 
-      {/* Adresse partenaire */}
+      
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Adresse :</Text>
         <Text style={styles.detailValue}>{appointment.partner_address_complete || "N/A"}</Text>
       </View>
 
-      {/* Téléphone partenaire */}
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Téléphone :</Text>
         <Text style={styles.detailValue}>
@@ -74,7 +72,6 @@ export default function DetailCard({ appointment, partner }) {
         </Text>
       </View>
 
-      {/* Date et Heure de l'appointment */}
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Date :</Text>
         <Text style={styles.detailValue}>{formatOdooDate(appointment.date_deadline)}</Text>
