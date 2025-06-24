@@ -7,10 +7,12 @@ export default function DetailHeader({ title, category, onSharePress }) {
   const router = useRouter()
 
   const handleBackPress = () => {
-    if (router.canGoBack()) {
-      router.back()
-    } 
-  }
+  router.replace({
+    pathname: "/",
+    params: { category },
+  })
+}
+
 
   return (
     <View style={styles.header}> 

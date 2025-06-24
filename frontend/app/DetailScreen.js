@@ -14,6 +14,7 @@ import { fetchTaskById, reportTask, startTaskInOdoo, fetchOdooTasks } from "./ut
 export default function DetailScreen() {
   const { id, category } = useLocalSearchParams();
   console.log('Received ID parameter:', id);  
+  console.log('Received category parameter:', category);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [appointment, setAppointment] = useState(null);
@@ -23,15 +24,40 @@ export default function DetailScreen() {
   const [isReporting, setIsReporting] = useState(false);
   const [filteredTaskIds, setFilteredTaskIds] = useState([]);
  
-  const transformAndFilterTasks = (tasks) => {
+  const transformAndFilterTasks = (tasks, categoryFilter) => {
     if (!tasks || !Array.isArray(tasks)) return [];
     
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
     return tasks
-      .filter(task => 
-        task.is_stop_maintenance === false && 
-        task.state === "01_in_progress" &&
-        task.timer_state !== "reported" 
-      )
+      .filter(task => {
+        // Filtre de base
+        const baseFilter = task.is_stop_maintenance === false && 
+                          task.state === "01_in_progress" &&
+                          task.timer_state !== "reported";
+        
+        if (!baseFilter) return false;
+        
+        // Filtre par catégorie si spécifiée
+        if (!categoryFilter || categoryFilter === "all") return true;
+        
+        if (!task.date_deadline) return false;
+        
+        const taskDate = new Date(task.date_deadline);
+        taskDate.setHours(0, 0, 0, 0);
+        
+        switch(categoryFilter) {
+          case "today":
+            return taskDate.getTime() === today.getTime();
+          case "past":
+            return taskDate < today;
+          case "upcoming":
+            return taskDate > today;
+          default:
+            return true;
+        }
+      })
       .map(task => ({
         id: task.id,
         clientName: task.partner_name || (task.partner_id?.[1]) || 'Client',
@@ -53,16 +79,24 @@ export default function DetailScreen() {
             }) 
           : null,
         is_stop_maintenance: task.is_stop_maintenance || false,
-      }));
+      }))
+      .sort((a, b) => {
+        // Trier par date et heure
+        if (!a.date_deadline && !b.date_deadline) return 0;
+        if (!a.date_deadline) return 1;
+        if (!b.date_deadline) return -1;
+        return new Date(a.date_deadline) - new Date(b.date_deadline);
+      });
   };
 
   useEffect(() => {
     async function loadFilteredTasks() {
       try {
-        const tasks = await fetchOdooTasks("", category || "today");
-        const filteredTasks = transformAndFilterTasks(tasks);
+        const tasks = await fetchOdooTasks("", "all"); 
+        const filteredTasks = transformAndFilterTasks(tasks, category);
         const taskIds = filteredTasks.map(task => task.id.toString());
         setFilteredTaskIds(taskIds);
+        console.log(`Loaded ${filteredTasks.length} filtered tasks for category: ${category}`);
       } catch (error) {
         console.error('Error fetching filtered tasks:', error);
         setFilteredTaskIds([]);
@@ -93,6 +127,7 @@ export default function DetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#52AFD4" />
           <Text style={styles.loadingText}>Chargement...</Text>
         </View>
       </View>
@@ -113,10 +148,13 @@ export default function DetailScreen() {
     );
   }
 
-  let currentAppointmentCategory = null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (appointment.date_deadline) {
+  // Déterminer la catégorie actuelle de la tâche
+  let currentAppointmentCategory = category; // Utiliser d'abord la catégorie passée en paramètre
+
+  // Si aucune catégorie n'est fournie, calculer basée sur la date
+  if (!currentAppointmentCategory && appointment.date_deadline) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const appointmentDate = new Date(appointment.date_deadline);
     appointmentDate.setHours(0, 0, 0, 0);
 
@@ -135,13 +173,11 @@ export default function DetailScreen() {
 
   const handleLaunch = async () => {
     try {
-      
       setLoading(true);
       
       const result = await startTaskInOdoo(id);
       
       if (result.success) {
-        
         router.push({
           pathname: "/Screens/InfoScreen",
           params: { id },
@@ -168,7 +204,6 @@ export default function DetailScreen() {
   const handleReport = () => {
     setReportModalVisible(true);
   };
-
 
   const handleConfirmReport = async () => {
     setIsReporting(true);
@@ -234,12 +269,10 @@ export default function DetailScreen() {
 
         <DetailCard appointment={appointment} clientInfo={null} />
 
-       
         {!shouldHideActionButtons && (
           <ActionButtons 
             onLaunch={handleLaunch} 
             onReport={handleReport} 
-            
           />
         )}
 
@@ -255,7 +288,6 @@ export default function DetailScreen() {
         </View>
       </View>
 
-      
       <Modal
         animationType="slide"
         transparent={true}
@@ -281,7 +313,7 @@ export default function DetailScreen() {
                   style={styles.textInput}
                   multiline={true}
                   numberOfLines={4}
-                  placeholder=""
+                  placeholder="Décrivez le problème..."
                   value={reportDescription}
                   onChangeText={setReportDescription}
                   textAlignVertical="top"
@@ -345,6 +377,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#6c757d",
     fontWeight: "500",
+    marginTop: 16,
   },
   errorContainer: {
     flex: 1,
