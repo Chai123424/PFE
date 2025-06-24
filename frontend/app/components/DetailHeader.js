@@ -7,12 +7,13 @@ export default function DetailHeader({ title, category, onSharePress }) {
   const router = useRouter()
 
   const handleBackPress = () => {
-  router.replace({
-    pathname: "/",
-    params: { category },
-  })
-}
-
+   
+      router.replace({
+        pathname: '/Screens/HomeScreen',
+        params: { category: category }
+      })
+    
+  }
 
   return (
     <View style={styles.header}> 
