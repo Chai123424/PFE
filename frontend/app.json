@@ -1,10 +1,9 @@
 {
   "expo": {
-    "name": "Smile Piscine",
+    "name": "frontend",
     "slug": "frontend",
     "version": "1.0.0",
     "scheme": "acme",
-    "icon": "./app/assets/logo.png",
     "plugins": [
       "expo-router",
       "expo-sqlite",
@@ -38,8 +37,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "8f89f0c0-92ce-44ec-93d3-579b1a9fbd41"
+        "projectId": "1bd54014-fa8c-486f-97e9-989ccdcfc4a7"
       }
-    }
+    },
+    "owner": "khadija02"
   }
 }
