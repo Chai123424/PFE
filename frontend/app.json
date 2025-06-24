@@ -1,9 +1,10 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "Smile Piscine",
     "slug": "frontend",
     "version": "1.0.0",
     "scheme": "acme",
+    "icon": "./app/assets/logo.png",
     "plugins": [
       "expo-router",
       "expo-sqlite",
@@ -22,7 +23,7 @@
       ]
     ],
     "android": {
-      "package": "com.chai1.frontend",
+      "package": "com.chai1.piscine",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
