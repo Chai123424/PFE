@@ -117,21 +117,14 @@ export default function ProfileInfoScreen({ navigation }) {
       console.log("Résultat stop_tache:", stopResult);
 
       if (stopResult.result === true) {
-        Alert.alert("Succès", "Tâche terminée avec succès.", [
-          {
-            text: "OK",
-            onPress: () => {
-              router.push({
-                pathname: '/Screens/ConfirmationScreen',
-                params: { 
-                  id,
-                  saved: 'true',
-                  attachmentIds: JSON.stringify(attachmentIds)
-                }
-              });
-            }
+        router.push({
+          pathname: '/Screens/ConfirmationScreen',
+          params: { 
+            id,
+            saved: 'true',
+            attachmentIds: JSON.stringify(attachmentIds)
           }
-        ]);
+        });
       } else if (stopResult.result === false) {
         Alert.alert("Attention", "La tâche n'a pas pu être arrêtée. Veuillez vérifier l'ID ou les timesheets.");
       } else {
