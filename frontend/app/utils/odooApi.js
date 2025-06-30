@@ -710,7 +710,7 @@ export const uploadPhotoToOdoo = async ({ base64Image, fileName, resModel, resId
     throw new Error(data.error.message);
   }
 
-  return data.result; 
+  return data.result;
 };
 
 export const savePhotosToOdoo = async (resId, patientName, beforeImageUri, afterImageUri) => {
@@ -726,7 +726,7 @@ export const savePhotosToOdoo = async (resId, patientName, beforeImageUri, after
       const attachmentId = await uploadPhotoToOdoo({
         base64Image: base64,
         fileName: `${patientName}_${nameSuffix}.jpg`,
-        resModel: "project.task", 
+        resModel: "project.task",
         resId: resId,
       });
 
@@ -754,6 +754,26 @@ export const savePhotosToOdoo = async (resId, patientName, beforeImageUri, after
     attachmentIds,
     errors,
   };
+};
+
+export const cleanupTempFiles = async () => {
+  try {
+    const cacheDirectory = FileSystem.cacheDirectory;
+    if (cacheDirectory) {
+      const files = await FileSystem.readDirectoryAsync(cacheDirectory);
+      const imageFiles = files.filter(file => 
+        file.toLowerCase().endsWith('.jpg') || 
+        file.toLowerCase().endsWith('.jpeg') || 
+        file.toLowerCase().endsWith('.png')
+      );
+      
+      for (const file of imageFiles) {
+        await FileSystem.deleteAsync(`${cacheDirectory}${file}`, { idempotent: true });
+      }
+    }
+  } catch (error) {
+    console.log("Erreur lors du nettoyage:", error);
+  }
 };
 
 export const getRecordNameFromOdoo = async (model, id) => {
@@ -829,16 +849,13 @@ export const startTaskInOdoo = async (taskId) => {
     return { success: false, error: "Impossible d'obtenir la localisation" };
   }
 
-  // FIXED: Convert timestamp to consistent format if needed
   let formattedTimestamp = locationData.timestamp;
   if (typeof locationData.timestamp === 'string' && locationData.timestamp.includes('T')) {
     const date = new Date(locationData.timestamp);
     formattedTimestamp = formatTimestampForOdoo(date);
   } else if (typeof locationData.timestamp === 'string') {
-    // Already in correct format, but verify it doesn't have 'T'
     formattedTimestamp = locationData.timestamp;
   } else {
-    // If it's a Date object or invalid, format it properly
     formattedTimestamp = formatTimestampForOdoo(new Date(locationData.timestamp));
   }
 
@@ -868,7 +885,7 @@ export const startTaskInOdoo = async (taskId) => {
         parseInt(taskId),
         locationData.latitude,
         locationData.longitude,
-        formattedTimestamp  // Use the properly formatted timestamp
+        formattedTimestamp 
       ]
     },
     id: Date.now()
@@ -934,7 +951,6 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
     return { success: false, error: "Configuration Odoo manquante" };
   }
 
-  // ENHANCED: Get current task data first to validate dates
   console.log('Fetching current task data to validate dates...');
   const currentTask = await fetchTaskById(taskId);
   if (!currentTask) {
@@ -942,19 +958,15 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
     return { success: false, error: "Impossible de récupérer les données de la tâche" };
   }
 
-  // ENHANCED: Format the timestamp and validate against current task dates
   let formattedEndDateTime = endDateTime;
   
-  // If endDateTime is a Date object, format it
   if (endDateTime instanceof Date) {
     formattedEndDateTime = formatTimestampForOdoo(endDateTime);
   }
-  // If endDateTime is an ISO string (contains 'T'), convert it
   else if (typeof endDateTime === 'string' && endDateTime.includes('T')) {
     const date = new Date(endDateTime);
     formattedEndDateTime = formatTimestampForOdoo(date);
   }
-  // If no endDateTime provided, use current time
   else if (!endDateTime) {
     formattedEndDateTime = formatTimestampForOdoo();
   }
@@ -968,15 +980,13 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
     timerState: currentTask.timer_state
   });
 
-  // ENHANCED: Validate that end time is not before start time
   if (currentTask.date_assign) {
     const taskStartDate = new Date(currentTask.date_assign);
     const taskEndDate = new Date(formattedEndDateTime);
     
     if (taskEndDate < taskStartDate) {
       console.warn('End date is before start date, adjusting...');
-      // Adjust end date to be at least 1 minute after start date
-      const adjustedEndDate = new Date(taskStartDate.getTime() + 60000); // Add 1 minute
+      const adjustedEndDate = new Date(taskStartDate.getTime() + 60000); 
       formattedEndDateTime = formatTimestampForOdoo(adjustedEndDate);
       console.log('Adjusted end date to:', formattedEndDateTime);
     }
@@ -997,7 +1007,6 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
 
   const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
 
-  // ENHANCED: Add more detailed logging and error handling
   const payload = {
     jsonrpc: "2.0",
     method: "call",
@@ -1011,8 +1020,8 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
         "project.task",           
         "stop_tache",             
         parseInt(taskId),
-        parseFloat(latitude) || 0.0,  // Ensure proper number format
-        parseFloat(longitude) || 0.0, // Ensure proper number format
+        parseFloat(latitude) || 0.0,  
+        parseFloat(longitude) || 0.0, 
         formattedEndDateTime,
         address || false  
       ]
@@ -1043,15 +1052,12 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
     if (data.error) {
       console.error('Erreur stop_tache:', data.error);
       
-      // ENHANCED: Handle specific validation errors
       let errorMessage = data.error.data?.message || data.error.message || 'Erreur inconnue';
       
-      // If it's a date validation error, provide more helpful message
       if (errorMessage.includes('planned start date must be before') || 
           errorMessage.includes('planned_dates_check')) {
         errorMessage = "Erreur de validation des dates. Veuillez réessayer dans quelques secondes.";
         
-        // Optionally, try again with current timestamp
         console.log('Date validation error detected, retrying with current timestamp...');
         const retryEndDateTime = formatTimestampForOdoo();
         
@@ -1060,7 +1066,7 @@ export const stopTacheInOdoo = async (taskId, latitude, longitude, endDateTime, 
           params: {
             ...payload.params,
             args: [
-              ...payload.params.args.slice(0, -2), // Keep all args except timestamp and address
+              ...payload.params.args.slice(0, -2), 
               retryEndDateTime,
               address || false
             ]

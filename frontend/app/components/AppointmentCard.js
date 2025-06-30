@@ -40,17 +40,14 @@ export default function AppointmentCard({ appointment, onPress }) {
       }}
     >
       <View style={styles.leftContent}>
-        {/* Client Name as main title */}
         <Text style={styles.clientName}>
           {appointment.clientName || appointment.name || "----------"}
         </Text>
         
-        {/* Reference and Description as subtitle */}
         <Text style={styles.referenceDetails}>
           {appointment.referenceAndDescription || appointment.partner_name || " "}
         </Text>
         
-        {/* CHANGÉ: Utilise date_deadline au lieu de date_assign */}
         <Text style={styles.dateText}>
           Date Limite: {formatDate(appointment.date_deadline)}
         </Text>

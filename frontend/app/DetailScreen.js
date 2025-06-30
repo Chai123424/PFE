@@ -148,10 +148,8 @@ export default function DetailScreen() {
     );
   }
 
-  // Déterminer la catégorie actuelle de la tâche
-  let currentAppointmentCategory = category; // Utiliser d'abord la catégorie passée en paramètre
+  let currentAppointmentCategory = category;
 
-  // Si aucune catégorie n'est fournie, calculer basée sur la date
   if (!currentAppointmentCategory && appointment.date_deadline) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -183,7 +181,8 @@ export default function DetailScreen() {
           params: { id },
         });
       } else {
-        Alert.alert(
+
+      Alert.alert(
           "Erreur", 
           result.error || "Impossible de lancer la tâche. Elle a peut-être déjà été commencée.",
           [{ text: "OK" }]

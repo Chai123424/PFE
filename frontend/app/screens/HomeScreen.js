@@ -25,11 +25,9 @@ export default function HomeScreen() {
   const [isConnected, setIsConnected] = useState(true);
   const [networkError, setNetworkError] = useState(false);
 
-  // Date utility functions
   const normalizeDate = (dateString) => {
     if (!dateString) return null;
     
-    // Create date in local timezone and normalize to start of day
     const date = new Date(dateString);
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   };
@@ -65,15 +63,13 @@ export default function HomeScreen() {
     
     return tasks
       .filter(task => {
-        // First filter by task state
         const isValidTask = task.is_stop_maintenance === false && 
                            task.state === "01_in_progress" &&
                            task.timer_state !== "reported";
         
         if (!isValidTask) return false;
         
-        // Then filter by date based on activeTab
-        if (!task.date_deadline) return false; // Exclude tasks without dates
+        if (!task.date_deadline) return false; 
         
         const taskDate = normalizeDate(task.date_deadline);
         if (!taskDate) return activeTab === "today";
@@ -154,7 +150,6 @@ export default function HomeScreen() {
 
     setLoading(true);
     try {
-      // Remove the activeTab parameter from fetchOdooTasks - get all tasks
       const tasks = await fetchOdooTasks("");
       setTasks(tasks);
       const transformed = transformTasksToAppointments(tasks);
@@ -214,10 +209,8 @@ export default function HomeScreen() {
     const task = tasks.find(t => t.id === id);
     
     if (task && task.timer_state === "start" && task.is_stop_maintenance === false) {
-      // Pass the current activeTab to maintain navigation context
       router.push(`./InfoScreen?id=${id}&category=${activeTab}&status=ongoing`);
     } else {
-      // Pass the current activeTab to maintain navigation context
       router.push(`/DetailScreen?id=${id}&category=${activeTab}`);
     }
   };
@@ -284,7 +277,6 @@ export default function HomeScreen() {
         isOffline={!isConnected}
       />
       
-      {/* N'afficher la barre de recherche que si connecté */}
       {isConnected && (
         <SearchBar 
           onChangeText={setSearchQuery} 

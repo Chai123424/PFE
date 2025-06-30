@@ -3,15 +3,20 @@
 import { useState, useEffect } from "react"
 import { StyleSheet, View, Text, TouchableOpacity, Image, SafeAreaView, StatusBar, Button, Alert, ActivityIndicator } from "react-native"
 import * as ImagePicker from "expo-image-picker"
+import * as FileSystem from 'expo-file-system'
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter, useLocalSearchParams } from "expo-router"
-import { useOdooAttachments ,getRecordNameFromOdoo,savePhotosToOdoo,stopTacheInOdoo} from '../utils/odooApi.js' 
+import { useOdooAttachments ,getRecordNameFromOdoo,savePhotosToOdoo,stopTacheInOdoo,uploadPhotoToOdoo} from '../utils/odooApi.js' 
+import { dbOperations } from '../utils/sqlite.js' 
 import * as Location from 'expo-location';
 import { useNetInfo } from '@react-native-community/netinfo';  
 
 export default function ProfileInfoScreen({ navigation }) {
-  const [beforeImage, setBeforeImage] = useState(null)
-  const [afterImage, setAfterImage] = useState(null)
+  
+  const [beforeImagePreview, setBeforeImagePreview] = useState(null)
+  const [afterImagePreview, setAfterImagePreview] = useState(null)
+  const [beforeImageData, setBeforeImageData] = useState(null)
+  const [afterImageData, setAfterImageData] = useState(null)
   const [activeSection, setActiveSection] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
@@ -41,9 +46,30 @@ export default function ProfileInfoScreen({ navigation }) {
     })()
   }, [])
 
-  const pickImage = async (type) => {
-    const setImageFunction = type === "before" ? setBeforeImage : setAfterImage
+  
+  const processImage = async (imageUri, type) => {
+    try {
+      
+      const base64 = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
 
+      if (type === "before") {
+        setBeforeImagePreview(imageUri); 
+        setBeforeImageData(base64); 
+      } else {
+        setAfterImagePreview(imageUri);
+        setAfterImageData(base64);
+      }
+
+      
+    } catch (error) {
+      console.error("Erreur lors du traitement de l'image:", error);
+      Alert.alert("Erreur", "Impossible de traiter l'image");
+    }
+  };
+
+  const pickImage = async (type) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: "images",
       allowsEditing: true,
@@ -52,14 +78,12 @@ export default function ProfileInfoScreen({ navigation }) {
     })
 
     if (!result.canceled) {
-      setImageFunction(result.assets[0].uri)
-      setActiveSection(null)
+      await processImage(result.assets[0].uri, type);
+      setActiveSection(null);
     }
   }
 
   const takePhoto = async (type) => {
-    const setImageFunction = type === "before" ? setBeforeImage : setAfterImage
-
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [4, 3],
@@ -67,14 +91,104 @@ export default function ProfileInfoScreen({ navigation }) {
     })
 
     if (!result.canceled) {
-      setImageFunction(result.assets[0].uri)
-      setActiveSection(null)
+      await processImage(result.assets[0].uri, type);
+      setActiveSection(null);
     }
   }
 
   const handleImagePress = (type) => {
     setActiveSection(activeSection === type ? null : type)
   }
+
+  const uploadPhotoToOdooLocal = async ({ base64Image, fileName, resModel, resId }) => {
+    const uid = await dbOperations?.getConfig?.('odoo_uid');
+    const password = await dbOperations?.getConfig?.('odoo_password');
+    const url = await dbOperations?.getConfig?.('odoo_url');
+    const dbName = await dbOperations?.getConfig?.('odoo_db');
+
+    if (!uid || !password || !url || !dbName) {
+      throw new Error('Configuration Odoo manquante');
+    }
+
+    const endpoint = url.replace(/\/$/, '') + '/jsonrpc';
+
+    const payload = {
+      jsonrpc: "2.0",
+      method: "call",
+      params: {
+        service: "object",
+        method: "execute_kw",
+        args: [
+          dbName,
+          parseInt(uid),
+          password,
+          "ir.attachment",
+          "create",
+          [{
+            name: fileName,
+            type: "binary",
+            datas: base64Image,
+            res_model: resModel,
+            res_id: resId,
+            mimetype: "image/jpeg"
+          }]
+        ]
+      },
+      id: Date.now()
+    };
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error.message);
+    }
+
+    return data.result;
+  };
+
+  const savePhotosDirectlyToOdoo = async (resId, patientName, beforeBase64, afterBase64) => {
+    let attachmentIds = [];
+    let errors = [];
+
+    const uploadImage = async (base64Data, nameSuffix) => {
+      try {
+        const attachmentId = await uploadPhotoToOdooLocal({
+          base64Image: base64Data,
+          fileName: `${patientName}_${nameSuffix}.jpg`,
+          resModel: "project.task",
+          resId: resId,
+        });
+        return { success: true, attachmentId };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    };
+
+    if (beforeBase64) {
+      const result = await uploadImage(beforeBase64, "before");
+      result.success ? attachmentIds.push(result.attachmentId) : errors.push(result.error);
+    }
+
+    if (afterBase64) {
+      const result = await uploadImage(afterBase64, "after");
+      result.success ? attachmentIds.push(result.attachmentId) : errors.push(result.error);
+    }
+
+    return {
+      success: errors.length === 0,
+      message: errors.length === 0
+        ? "Les photos ont été envoyées avec succès à Odoo."
+        : "Certaines photos n'ont pas pu être envoyées.",
+      attachmentIds,
+      errors,
+    };
+  };
 
   const handleSaveToOdoo = async () => {
     if (!netInfo.isConnected) {
@@ -98,12 +212,17 @@ export default function ProfileInfoScreen({ navigation }) {
 
       let attachmentIds = [];
 
-      if (beforeImage || afterImage) {
+      if (beforeImageData || afterImageData) {
         const patientName = await getRecordNameFromOdoo("project.task", id);
-        const result = await savePhotosToOdoo(id, patientName, beforeImage, afterImage);
+        const result = await savePhotosDirectlyToOdoo(id, patientName, beforeImageData, afterImageData);
 
         if (result.success) {
           attachmentIds = result.attachmentIds;
+          
+          setBeforeImageData(null);
+          setAfterImageData(null);
+          setBeforeImagePreview(null);
+          setAfterImagePreview(null);
         } else {
           Alert.alert("Erreur", result.message);
           console.log("Erreurs détaillées:", result.errors);
@@ -138,6 +257,16 @@ export default function ProfileInfoScreen({ navigation }) {
     }
   };
 
+  const removeImage = (type) => {
+    if (type === "before") {
+      setBeforeImagePreview(null);
+      setBeforeImageData(null);
+    } else {
+      setAfterImagePreview(null);
+      setAfterImageData(null);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -158,8 +287,16 @@ export default function ProfileInfoScreen({ navigation }) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Avant: </Text>
         <TouchableOpacity style={styles.imageContainer} onPress={() => handleImagePress("before")}>
-          {beforeImage ? (
-            <Image source={{ uri: beforeImage }} style={styles.image} />
+          {beforeImagePreview ? (
+            <View style={styles.imageWrapper}>
+              <Image source={{ uri: beforeImagePreview }} style={styles.image} />
+              <TouchableOpacity 
+                style={styles.removeButton} 
+                onPress={() => removeImage("before")}
+              >
+                <Ionicons name="close-circle" size={24} color="#FF4444" />
+              </TouchableOpacity>
+            </View>
           ) : (
             <View style={styles.placeholderContainer}>
               <Ionicons name="camera" size={32} color="#999" />
@@ -180,8 +317,16 @@ export default function ProfileInfoScreen({ navigation }) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Après: </Text>
         <TouchableOpacity style={styles.imageContainer} onPress={() => handleImagePress("after")}>
-          {afterImage ? (
-            <Image source={{ uri: afterImage }} style={styles.image} />
+          {afterImagePreview ? (
+            <View style={styles.imageWrapper}>
+              <Image source={{ uri: afterImagePreview }} style={styles.image} />
+              <TouchableOpacity 
+                style={styles.removeButton} 
+                onPress={() => removeImage("after")}
+              >
+                <Ionicons name="close-circle" size={24} color="#FF4444" />
+              </TouchableOpacity>
+            </View>
           ) : (
             <View style={styles.placeholderContainer}>
               <Ionicons name="camera" size={32} color="#999" />
@@ -264,6 +409,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
   },
+  imageWrapper: {
+    position: 'relative',
+    width: "100%",
+    height: "100%",
+  },
   placeholderContainer: {
     width: "100%",
     height: "100%",
@@ -275,6 +425,13 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     resizeMode: "cover",
+  },
+  removeButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'white',
+    borderRadius: 12,
   },
   buttonContainer: {
     marginTop: 10,
