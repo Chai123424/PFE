@@ -1,10 +1,245 @@
-
 import * as Location from 'expo-location';
 import { Alert } from 'react-native';
 
+// Cache for poor connectivity - keep results longer
+const geocodingCache = new Map();
+const MAX_CACHE_SIZE = 100;
+const CACHE_EXPIRY_TIME = 60 * 60 * 1000; // 1 hour for poor connectivity
+
+// Simple queue without complex processing
+const geocodingQueue = [];
+let isProcessingQueue = false;
+const THROTTLE_DELAY = 2000; // Longer delay for poor connectivity
+
 /**
- * Demande les permissions de géolocalisation
- * @returns {Promise<boolean>} true si permission accordée, false sinon
+ * Clean expired cache entries
+ */
+const cleanExpiredCache = () => {
+  const now = Date.now();
+  for (const [key, value] of geocodingCache.entries()) {
+    if (now - value.timestamp > CACHE_EXPIRY_TIME) {
+      geocodingCache.delete(key);
+    }
+  }
+};
+
+/**
+ * Generate cache key from coordinates
+ */
+const generateCacheKey = (latitude, longitude) => {
+  const lat = Math.round(latitude * 10000) / 10000;
+  const lng = Math.round(longitude * 10000) / 10000;
+  return `${lat},${lng}`;
+};
+
+/**
+ * Calculate address quality score
+ */
+const calculateAddressQuality = (address, formattedAddress) => {
+  let score = 0;
+  
+  // Street details
+  if (address.streetNumber) score += 3;
+  if (address.street) score += 3;
+  if (address.name) score += 2;
+  
+  // Area details
+  if (address.district) score += 2;
+  if (address.subLocality) score += 2;
+  if (address.postalCode) score += 1;
+  
+  // Complexity bonus
+  const parts = formattedAddress.split(',').length;
+  if (parts >= 4) score += 1;
+  if (parts >= 6) score += 1;
+  
+  return score;
+};
+
+/**
+ * Format address with priority to details and avoid redundancy
+ */
+const formatAddress = (address) => {
+  const parts = [];
+  
+  // Check if name contains street information to avoid duplication
+  const hasNameWithStreet = address.name && 
+    !address.name.toLowerCase().includes('unnamed') &&
+    address.street &&
+    address.name.toLowerCase().includes(address.street.toLowerCase());
+  
+  // Add name only if it doesn't duplicate street information
+  if (address.name && 
+      !address.name.toLowerCase().includes('unnamed') &&
+      !hasNameWithStreet) {
+    parts.push(address.name);
+  }
+  
+  // Add street with number, or use name if it already contains complete street info
+  if (hasNameWithStreet && address.name) {
+    parts.push(address.name);
+  } else if (address.streetNumber && address.street) {
+    parts.push(`${address.streetNumber} ${address.street}`);
+  } else if (address.street) {
+    parts.push(address.street);
+  }
+  
+  if (address.district) parts.push(address.district);
+  if (address.subLocality) parts.push(address.subLocality);
+  
+  // Add city
+  if (address.city) parts.push(address.city);
+  
+  if (address.postalCode) parts.push(address.postalCode);
+  
+  // Add region only if it's different from city and doesn't contain the city name
+  if (address.region && 
+      address.region !== address.city && 
+      address.city && 
+      !address.region.toLowerCase().includes(address.city.toLowerCase())) {
+    parts.push(address.region);
+  }
+  
+  if (address.country) parts.push(address.country);
+  
+  return parts.join(', ');
+};
+
+/**
+ * Single reverse geocode attempt
+ */
+const singleReverseGeocode = async (latitude, longitude) => {
+  try {
+    console.log('🔍 Attempting reverse geocoding...');
+    
+    const results = await Location.reverseGeocodeAsync({
+      latitude,
+      longitude,
+    });
+    
+    if (results && results.length > 0) {
+      const address = results[0];
+      const formattedAddress = formatAddress(address);
+      const quality = calculateAddressQuality(address, formattedAddress);
+      
+      return {
+        address: formattedAddress,
+        quality,
+        raw: address
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Geocoding attempt failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Process geocoding queue with throttling
+ */
+const processGeocodingQueue = async () => {
+  if (isProcessingQueue || geocodingQueue.length === 0) return;
+  
+  isProcessingQueue = true;
+  console.log(`🔄 Processing ${geocodingQueue.length} queued requests...`);
+  
+  while (geocodingQueue.length > 0) {
+    const { latitude, longitude, resolve, reject, maxRetries } = geocodingQueue.shift();
+    
+    try {
+      const result = await reverseGeocodeWithRetries(latitude, longitude, maxRetries, false);
+      resolve(result);
+    } catch (error) {
+      reject(error);
+    }
+    
+    // Wait between requests for poor connectivity
+    if (geocodingQueue.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, THROTTLE_DELAY));
+    }
+  }
+  
+  isProcessingQueue = false;
+  console.log('✅ Queue processing completed');
+};
+
+/**
+ * Reverse geocode with retries - optimized for poor connectivity
+ */
+const reverseGeocodeWithRetries = async (latitude, longitude, maxRetries = 5, useQueue = true) => {
+  if (useQueue) {
+    return new Promise((resolve, reject) => {
+      geocodingQueue.push({ latitude, longitude, resolve, reject, maxRetries });
+      processGeocodingQueue();
+    });
+  }
+  
+  let bestResult = null;
+  let bestScore = 0;
+  let lastError = null;
+  
+  console.log(`🎯 Starting geocoding with ${maxRetries} retries for poor connectivity`);
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Attempt ${attempt}/${maxRetries}`);
+      
+      const result = await singleReverseGeocode(latitude, longitude);
+      
+      if (result) {
+        console.log(`📊 Quality: ${result.quality}, Address: "${result.address}"`);
+        
+        if (result.quality > bestScore) {
+          bestResult = result;
+          bestScore = result.quality;
+        }
+        
+        // For poor connectivity, accept good results quickly
+        if (result.quality >= 6) {
+          console.log('🎉 High quality result - stopping retries');
+          break;
+        }
+        
+        // Accept medium quality after half the attempts
+        if (result.quality >= 4 && attempt >= Math.ceil(maxRetries / 2)) {
+          console.log('✅ Acceptable quality result - stopping retries');
+          break;
+        }
+      }
+      
+      // Progressive delay for poor connectivity
+      if (attempt < maxRetries) {
+        const delay = Math.min(2000 * Math.pow(1.5, attempt - 1), 8000); // Max 8s for poor connectivity
+        console.log(`⏳ Waiting ${delay}ms for poor connectivity...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+    } catch (error) {
+      console.error(`❌ Attempt ${attempt} failed:`, error.message);
+      lastError = error;
+      
+      // Longer delays on errors for poor connectivity
+      if (attempt < maxRetries) {
+        const delay = Math.min(3000 * Math.pow(2, attempt - 1), 15000); // Max 15s
+        console.log(`⏳ Error delay: ${delay}ms for poor connectivity...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  if (bestResult) {
+    console.log(`🏆 Best result (score: ${bestScore}): "${bestResult.address}"`);
+    return bestResult; // Return the complete result object
+  }
+  
+  console.error('💥 All attempts failed:', lastError?.message);
+  throw lastError || new Error('Geocoding failed after all retries');
+};
+
+/**
+ * Request location permission
  */
 export const requestLocationPermission = async () => {
   try {
@@ -21,116 +256,107 @@ export const requestLocationPermission = async () => {
     
     return true;
   } catch (error) {
-    console.error('Erreur lors de la demande de permission:', error);
-    Alert.alert(
-      'Erreur',
-      'Impossible de demander la permission de géolocalisation.',
-      [{ text: 'OK' }]
-    );
+    console.error('❌ Permission error:', error);
     return false;
   }
 };
 
 /**
- * Effectue une géolocalisation inverse (coordonnées -> adresse)
- * @param {number} latitude 
- * @param {number} longitude 
- * @returns {Promise<string|null>} Adresse formatée ou null en cas d'erreur
+ * Main reverse geocoding function with cache and retries
  */
-export const reverseGeocode = async (latitude, longitude) => {
+export const reverseGeocode = async (latitude, longitude, options = {}) => {
+  const {
+    maxRetries = 5,
+    useCache = true,
+    forceRefresh = false
+  } = options;
+  
   try {
-    console.log('Reverse geocoding coordinates:', { latitude, longitude });
+    console.log('🚀 Starting geocoding for poor connectivity');
     
-    const reverseGeocodedAddress = await Location.reverseGeocodeAsync({
-      latitude,
-      longitude,
-    });
+    cleanExpiredCache();
     
-    console.log('Reverse geocoding result:', reverseGeocodedAddress);
+    const cacheKey = generateCacheKey(latitude, longitude);
     
-    if (reverseGeocodedAddress && reverseGeocodedAddress.length > 0) {
-      const address = reverseGeocodedAddress[0];
-      
-      
-      const addressParts = [];
-      
-      if (address.streetNumber) {
-        addressParts.push(address.streetNumber);
-      }
-      if (address.street) {
-        addressParts.push(address.street);
-      }
-      if (address.city) {
-        addressParts.push(address.city);
-      }
-      if (address.postalCode) {
-        addressParts.push(address.postalCode);
-      }
-      if (address.region) {
-        addressParts.push(address.region);
-      }
-      if (address.country) {
-        addressParts.push(address.country);
-      }
-      
-      const formattedAddress = addressParts.join(', ');
-      console.log('Formatted address:', formattedAddress);
-      
-      return formattedAddress || null;
+    // Check cache first - critical for poor connectivity
+    if (useCache && !forceRefresh && geocodingCache.has(cacheKey)) {
+      const cached = geocodingCache.get(cacheKey);
+      console.log('💾 Using cached result (saves network):', cached.address);
+      return cached.address;
     }
     
-    return null;
+    // Perform geocoding with retries - get the complete result object
+    const result = await reverseGeocodeWithRetries(latitude, longitude, maxRetries);
+    
+    // Cache successful results - important for poor connectivity
+    if (useCache && result && result.address) {
+      geocodingCache.set(cacheKey, {
+        address: result.address,
+        timestamp: Date.now(),
+        quality: result.quality
+      });
+      
+      console.log('💾 Cached for poor connectivity (quality:', result.quality, ')');
+      
+      // Manage cache size
+      if (geocodingCache.size > MAX_CACHE_SIZE) {
+        const oldestKey = geocodingCache.keys().next().value;
+        geocodingCache.delete(oldestKey);
+      }
+    }
+    
+    return result ? result.address : null;
+    
   } catch (error) {
-    console.error('Erreur lors de la géolocalisation inverse:', error);
+    console.error('💥 Geocoding failed completely:', error);
+    
+    // For poor connectivity, return expired cache as last resort
+    if (useCache) {
+      const cacheKey = generateCacheKey(latitude, longitude);
+      if (geocodingCache.has(cacheKey)) {
+        const cached = geocodingCache.get(cacheKey);
+        console.log('🆘 Using expired cache as fallback for poor connectivity');
+        return cached.address;
+      }
+    }
+    
     return null;
   }
 };
 
 /**
- * Obtient la position actuelle de l'utilisateur
- * @param {Object} options - Options pour la géolocalisation
- * @returns {Promise<{latitude: number, longitude: number} | null>}
+ * Get current location with longer timeouts for poor connectivity
  */
 export const getCurrentLocation = async (options = {}) => {
   try {
-    
     const hasPermission = await requestLocationPermission();
-    if (!hasPermission) {
-      return null;
-    }
+    if (!hasPermission) return null;
 
-    
+    // Longer timeouts for poor connectivity
     const defaultOptions = {
-      accuracy: Location.Accuracy.High,
-      timeout: 15000,
-      maximumAge: 10000,
+      accuracy: Location.Accuracy.BestForNavigation,
+      timeout: 30000, // 30 seconds for poor connectivity
+      maximumAge: 10000, // 10 seconds cache
       ...options
     };
 
-    console.log('Récupération de la position...');
+    console.log('📍 Getting location (poor connectivity mode)...');
+    
     const location = await Location.getCurrentPositionAsync(defaultOptions);
     
-    const result = {
+    return {
       latitude: location.coords.latitude,
       longitude: location.coords.longitude,
       accuracy: location.coords.accuracy,
       timestamp: location.timestamp
     };
     
-    console.log('Position obtenue:', result);
-    return result;
-    
   } catch (error) {
-    console.error('Erreur lors de la récupération de la position:', error);
+    console.error('❌ Location error:', error);
     
     let errorMessage = 'Impossible de récupérer votre position.';
-    
     if (error.code === 'E_LOCATION_TIMEOUT') {
-      errorMessage = 'Délai d\'attente dépassé. Vérifiez que le GPS est activé.';
-    } else if (error.code === 'E_LOCATION_UNAVAILABLE') {
-      errorMessage = 'Service de localisation indisponible.';
-    } else if (error.code === 'E_LOCATION_SETTINGS_UNSATISFIED') {
-      errorMessage = 'Paramètres de localisation non satisfaits. Activez le GPS.';
+      errorMessage = 'Connexion lente détectée. Vérifiez votre signal GPS et réseau.';
     }
     
     Alert.alert('Erreur de géolocalisation', errorMessage, [{ text: 'OK' }]);
@@ -139,77 +365,33 @@ export const getCurrentLocation = async (options = {}) => {
 };
 
 /**
- * Obtient la position actuelle avec l'adresse
- * @param {Object} options - Options pour la géolocalisation
- * @returns {Promise<{latitude: number, longitude: number, address: string} | null>}
+ * Get current location with address - optimized for poor connectivity
  */
 export const getCurrentLocationWithAddress = async (options = {}) => {
   try {
+    console.log('🌍 Getting location with address (poor connectivity)...');
+    
     const location = await getCurrentLocation(options);
-    if (!location) {
-      return null;
-    }
+    if (!location) return null;
 
-    const address = await reverseGeocode(location.latitude, location.longitude);
+    // Use cache aggressively for poor connectivity
+    const address = await reverseGeocode(location.latitude, location.longitude, {
+      maxRetries: 3, // Fewer retries to save time
+      useCache: true
+    });
     
     return {
       ...location,
       address: address || 'Adresse inconnue'
     };
   } catch (error) {
-    console.error('Erreur getCurrentLocationWithAddress:', error);
+    console.error('❌ Error getting location with address:', error);
     return null;
   }
 };
 
 /**
- * Surveille la position en continu (pour les tâches en cours)
- * @param {Function} callback - Fonction appelée à chaque mise à jour de position
- * @param {Object} options - Options pour le suivi
- * @returns {Promise<Object>} Objet avec une méthode remove() pour arrêter le suivi
- */
-export const watchLocation = async (callback, options = {}) => {
-  try {
-    const hasPermission = await requestLocationPermission();
-    if (!hasPermission) {
-      return null;
-    }
-
-    const defaultOptions = {
-      accuracy: Location.Accuracy.High,
-      timeInterval: 10000, 
-      distanceInterval: 10, 
-      ...options
-    };
-
-    const subscription = await Location.watchPositionAsync(
-      defaultOptions,
-      (location) => {
-        const position = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          accuracy: location.coords.accuracy,
-          timestamp: location.timestamp
-        };
-        callback(position);
-      }
-    );
-
-    return subscription;
-  } catch (error) {
-    console.error('Erreur lors du suivi de position:', error);
-    Alert.alert(
-      'Erreur',
-      'Impossible de démarrer le suivi de position.',
-      [{ text: 'OK' }]
-    );
-    return null;
-  }
-};
-
-/**
- * Formate la date actuelle pour l'API Odoo
- * @returns {string} Date au format "YYYY-MM-DD HH:MM:SS"
+ * Format date for Odoo
  */
 export const formatDateForOdoo = (date = new Date()) => {
   const year = date.getFullYear();
@@ -223,32 +405,13 @@ export const formatDateForOdoo = (date = new Date()) => {
 };
 
 /**
- * Obtient la position et l'heure actuelles formatées pour Odoo
- * @returns {Promise<{latitude: number, longitude: number, timestamp: string} | null>}
+ * Get location, time and address for Odoo - poor connectivity optimized
  */
-export const getLocationAndTime = async () => {
-  const location = await getCurrentLocation();
-  if (!location) {
-    return null;
-  }
+export const getLocationTimeAndAddress = async (options = {}) => {
+  console.log('🌍⏰ Getting location, time and address for Odoo (poor connectivity)...');
   
-  return {
-    latitude: location.latitude,
-    longitude: location.longitude,
-    timestamp: formatDateForOdoo(),
-    accuracy: location.accuracy
-  };
-};
-
-/**
- * Obtient la position, l'heure et l'adresse actuelles formatées pour Odoo
- * @returns {Promise<{latitude: number, longitude: number, timestamp: string, address: string} | null>}
- */
-export const getLocationTimeAndAddress = async () => {
-  const location = await getCurrentLocationWithAddress();
-  if (!location) {
-    return null;
-  }
+  const location = await getCurrentLocationWithAddress(options);
+  if (!location) return null;
   
   return {
     latitude: location.latitude,
@@ -256,5 +419,37 @@ export const getLocationTimeAndAddress = async () => {
     timestamp: formatDateForOdoo(),
     accuracy: location.accuracy,
     address: location.address
+  };
+};
+
+/**
+ * Clear geocoding cache
+ */
+export const clearGeocodingCache = () => {
+  geocodingCache.clear();
+  console.log('🧹 Cache cleared');
+};
+
+/**
+ * Get cache statistics - useful for poor connectivity monitoring
+ */
+export const getCacheStats = () => {
+  const now = Date.now();
+  let validEntries = 0;
+  let expiredEntries = 0;
+  
+  for (const [key, value] of geocodingCache.entries()) {
+    if (now - value.timestamp > CACHE_EXPIRY_TIME) {
+      expiredEntries++;
+    } else {
+      validEntries++;
+    }
+  }
+  
+  return {
+    total: geocodingCache.size,
+    valid: validEntries,
+    expired: expiredEntries,
+    hitRate: geocodingCache.size > 0 ? (validEntries / geocodingCache.size * 100).toFixed(1) + '%' : '0%'
   };
 };

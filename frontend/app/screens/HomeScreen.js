@@ -120,6 +120,23 @@ export default function HomeScreen() {
             : null,
           is_stop_maintenance: task.is_stop_maintenance || false,
         };
+      })
+      .sort((a, b) => {
+        // Handle tasks without dates - put them at the end
+        if (!a.date_deadline && !b.date_deadline) return 0;
+        if (!a.date_deadline) return 1;
+        if (!b.date_deadline) return -1;
+        
+        const dateA = new Date(a.date_deadline);
+        const dateB = new Date(b.date_deadline);
+        
+        // For "previous" tab, show most recent first (descending order)
+        if (activeTab === "previous") {
+          return dateB.getTime() - dateA.getTime();
+        }
+        
+        // For "today" and "upcoming", show earliest first (ascending order)
+        return dateA.getTime() - dateB.getTime();
       });
   }, [activeTab]);
 
