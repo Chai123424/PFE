@@ -3,16 +3,14 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native"
 import { ArrowLeft } from "lucide-react-native"
 import { useRouter } from "expo-router"
 
-export default function DetailHeader({ title, category, onSharePress }) {
+export default function DetailHeader({ title, category, onSharePress, hideTransfer = false }) {
   const router = useRouter()
 
   const handleBackPress = () => {
-   
-      router.replace({
-        pathname: '/Screens/HomeScreen',
-        params: { category: category }
-      })
-    
+    router.replace({
+      pathname: '/Screens/HomeScreen',
+      params: { category: category }
+    })
   }
 
   return (
@@ -26,15 +24,18 @@ export default function DetailHeader({ title, category, onSharePress }) {
       
       <Text style={styles.headerTitle}>{title}</Text>
       
-      <TouchableOpacity style={styles.shareButton} onPress={onSharePress}>
-        <Image 
-          source={require('../assets/partager (2).png')} 
-          style={styles.shareIconImage}
-        />
-      </TouchableOpacity>
+      {!hideTransfer && (
+        <TouchableOpacity style={styles.shareButton} onPress={onSharePress}>
+          <Image 
+            source={require('../assets/partager (2).png')} 
+            style={styles.shareIconImage}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   )
 }
+
 
 const styles = StyleSheet.create({
   header: {
@@ -52,6 +53,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: "#1f3493",
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    left: '60%',
+    transform: [{ translateX: -50 }],
   },
   shareButton: {
     padding: 8,

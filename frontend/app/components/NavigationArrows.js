@@ -11,63 +11,119 @@ export default function NavigationArrows({ currentId, category, filteredTaskIds 
   const [loading, setLoading] = useState(true)
 
   const transformAndFilterTasks = (tasks, categoryFilter) => {
-    if (!tasks || !Array.isArray(tasks)) return []
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
+    if (!tasks || !Array.isArray(tasks)) return [];
+  
+    const now = new Date(); // Current date and time
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1); // Start of tomorrow
+  
     return tasks
       .filter(task => {
-        // Filtre de base
+        // Base filter
         const baseFilter = task.is_stop_maintenance === false &&
                            task.state === "01_in_progress" &&
-                           task.timer_state !== "reported"
-
-        if (!baseFilter || !task.date_deadline) return false
-
-        const taskDate = new Date(task.date_deadline)
-        if (isNaN(taskDate)) return false
-        taskDate.setHours(0, 0, 0, 0)
-
-        // Debug
-        console.log(`Category: ${categoryFilter} | Task ID: ${task.id} | Deadline: ${task.date_deadline} | TaskDate: ${taskDate} | Today: ${today}`)
-
+                           task.timer_state !== "reported";
+  
+        if (!baseFilter) return false;
+  
+        // If no deadline, only show in "today" category
+        if (!task.date_deadline) return categoryFilter === "today";
+  
+        const taskDateTime = new Date(task.date_deadline);
+        if (isNaN(taskDateTime)) return false;
+  
+        // Use the same logic as HomeScreen for consistency
         switch (categoryFilter) {
-  case "today":
-    return taskDate.getTime() === today.getTime()
-  case "past":
-  case "previous": // <- c’est le cas utilisé chez toi
-    return taskDate.getTime() < today.getTime()
-  case "upcoming":
-    return taskDate.getTime() > today.getTime()
-  default:
-    return true
-}
-
+          case "previous":
+            // All tasks before now (past due)
+            return taskDateTime < now;
+            
+          case "today":
+            // Tasks scheduled for today (regardless of time)
+            // OR tasks that are overdue from previous days
+            return (taskDateTime >= today && taskDateTime < tomorrow);
+            
+          case "upcoming":
+            // Tasks scheduled for future dates (tomorrow and beyond)
+            return taskDateTime >= tomorrow;
+            
+          default:
+            return true;
+        }
       })
-      .map(task => ({
-        id: task.id,
-        clientName: task.partner_name || (task.partner_id?.[1]) || 'Client',
-        referenceAndDescription: task.name || 'Unnamed Task',
-        type: task.project_id?.[1] || 'Task',
-        time: task.date_deadline
-          ? new Date(task.date_deadline).toLocaleTimeString('fr-FR', {
-              hour: '2-digit',
-              minute: '2-digit'
-            })
-          : "--:--",
-        status: "à faire",
-        date_deadline: task.date_deadline,
-        formattedDate: task.date_deadline
-          ? new Date(task.date_deadline).toLocaleDateString('fr-FR', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric'
-            })
-          : null,
-        is_stop_maintenance: task.is_stop_maintenance || false,
-      }))
-  }
+      .map(task => {
+        let status = "à faire";
+        let statusColor = "#FFC107";
+        
+        if (task.timer_state === "start" && task.is_stop_maintenance === false) {
+          status = "en cours";
+          statusColor = "#d62c1a";
+        } else if (task.date_deadline) {
+          const taskDateTime = new Date(task.date_deadline);
+          const now = new Date();
+          
+          // Mark as overdue if past the deadline
+          if (taskDateTime < now) {
+            status = "en retard";
+            statusColor = "#e74c3c";
+          }
+        }
+  
+        return {
+          id: task.id,
+          clientName: task.partner_name || (task.partner_id?.[1]) || 'Client',
+          referenceAndDescription: task.name || 'Unnamed Task',
+          type: task.project_id?.[1] || 'Task',
+          time: task.date_deadline
+            ? new Date(task.date_deadline).toLocaleTimeString('fr-FR', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+            : "--:--",
+          status: status,
+          statusColor: statusColor,
+          date_deadline: task.date_deadline,
+          formattedDate: task.date_deadline
+            ? new Date(task.date_deadline).toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+              })
+            : null,
+          is_stop_maintenance: task.is_stop_maintenance || false,
+          isOverdue: task.date_deadline && new Date(task.date_deadline) < new Date(),
+        };
+      })
+      .sort((a, b) => {
+        // Handle tasks without dates - put them at the end
+        if (!a.date_deadline && !b.date_deadline) return 0;
+        if (!a.date_deadline) return 1;
+        if (!b.date_deadline) return -1;
+        
+        const dateA = new Date(a.date_deadline);
+        const dateB = new Date(b.date_deadline);
+        
+        // Get date parts for grouping by day
+        const dayA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate());
+        const dayB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate());
+        
+        if (categoryFilter === "previous") {
+          // For previous tab: Group by day (most recent day first), then by time (earliest first within each day)
+          if (dayA.getTime() !== dayB.getTime()) {
+            return dayB.getTime() - dayA.getTime(); // Most recent day first
+          }
+          return dateA.getTime() - dateB.getTime(); // Earliest time first within the day
+        }
+        
+        // For "today" and "upcoming": Group by day (earliest day first), then by time (earliest first within each day)
+        if (dayA.getTime() !== dayB.getTime()) {
+          return dayA.getTime() - dayB.getTime(); // Earliest day first
+        }
+        return dateA.getTime() - dateB.getTime();
+      });
+  };
 
   useEffect(() => {
     async function loadAppointments() {
@@ -76,7 +132,8 @@ export default function NavigationArrows({ currentId, category, filteredTaskIds 
         const tasks = await fetchOdooTasks("", "all")
         const filtered = transformAndFilterTasks(tasks, category)
         setFilteredAppointments(filtered)
-        console.log(`Loaded ${filtered.length} tasks for category: ${category}`)
+        console.log(`NavigationArrows: Loaded ${filtered.length} tasks for category: ${category}`)
+        console.log('Filtered task IDs:', filtered.map(t => t.id))
       } catch (error) {
         console.error('Error fetching tasks for navigation:', error)
         setFilteredAppointments([])
@@ -93,6 +150,8 @@ export default function NavigationArrows({ currentId, category, filteredTaskIds 
   const currentIndex = filteredAppointments.findIndex(app => app.id === parseInt(currentId))
   const prevId = currentIndex > 0 ? filteredAppointments[currentIndex - 1].id : null
   const nextId = currentIndex < filteredAppointments.length - 1 ? filteredAppointments[currentIndex + 1].id : null
+
+  console.log(`NavigationArrows: Current ID: ${currentId}, Current Index: ${currentIndex}, Total: ${filteredAppointments.length}`)
 
   if (loading) {
     return (
@@ -136,7 +195,7 @@ export default function NavigationArrows({ currentId, category, filteredTaskIds 
         </Text>
         <Text style={styles.categoryText}>
           {category === "today" ? "Aujourd'hui" :
-           category === "past" ? "Passées" :
+           category === "previous" ? "Passées" :
            category === "upcoming" ? "Prévues" : "Toutes"}
         </Text>
       </View>
@@ -164,7 +223,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    marginTop: 20,
+    
     minHeight: 50,
   },
   arrowButton: {

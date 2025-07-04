@@ -42,7 +42,10 @@ export default function DetailScreen() {
         // Filtre par catégorie si spécifiée
         if (!categoryFilter || categoryFilter === "all") return true;
         
-        if (!task.date_deadline) return false;
+        if (!task.date_deadline) {
+          // Tasks without deadlines only appear in "today" tab
+          return categoryFilter === "today";
+        }
         
         const taskDate = new Date(task.date_deadline);
         taskDate.setHours(0, 0, 0, 0);
@@ -148,8 +151,10 @@ export default function DetailScreen() {
     );
   }
 
-  let currentAppointmentCategory = category;
+  // Déterminer la catégorie actuelle de la tâche
+  let currentAppointmentCategory = category; // Utiliser d'abord la catégorie passée en paramètre
 
+  // Si aucune catégorie n'est fournie, calculer basée sur la date
   if (!currentAppointmentCategory && appointment.date_deadline) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -169,6 +174,9 @@ export default function DetailScreen() {
     appointment.timer_state === "start" && 
     appointment.is_stop_maintenance === false;
 
+  const shouldHideTransfer = appointment && 
+    (appointment.timer_state === "start" );
+
   const handleLaunch = async () => {
     try {
       setLoading(true);
@@ -181,8 +189,7 @@ export default function DetailScreen() {
           params: { id },
         });
       } else {
-
-      Alert.alert(
+        Alert.alert(
           "Erreur", 
           result.error || "Impossible de lancer la tâche. Elle a peut-être déjà été commencée.",
           [{ text: "OK" }]
@@ -259,6 +266,7 @@ export default function DetailScreen() {
         onTransfer={handleTransfer}
         category={currentAppointmentCategory}
         onSharePress={handleTransfer}
+        hideTransfer={shouldHideTransfer}
       />
       
       <View style={styles.contentContainer}>

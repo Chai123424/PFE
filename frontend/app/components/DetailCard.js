@@ -1,14 +1,16 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 
+// Fonction utilitaire pour extraire la valeur d'un champ Odoo
 const getOdooValue = (field) => {
   if (!field) return "N/A";
 
-  
+  // Cas d'un champ many2one : [id, nom]
   if (Array.isArray(field) && field.length >= 2) {
     return field[1];
   }
 
+  // Cas d'une chaîne ou nombre simple
   if (typeof field === "string" || typeof field === "number") {
     return field.toString();
   }
@@ -16,6 +18,7 @@ const getOdooValue = (field) => {
   return "N/A";
 };
 
+// Formatage de la date en français
 const formatOdooDate = (dateString) => {
   if (!dateString) return "N/A";
   try {
@@ -27,6 +30,7 @@ const formatOdooDate = (dateString) => {
   }
 };
 
+// Formatage de l'heure en français
 const formatOdooTime = (datetime) => {
   if (!datetime) return "N/A";
   try {
@@ -51,7 +55,7 @@ export default function DetailCard({ appointment, partner }) {
 
   return (
     <View style={styles.detailsCard}>
-      
+      {/* Numéro - nom ou ID appointment */}
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Numéro :</Text>
         <Text style={styles.detailValue}>
@@ -59,12 +63,13 @@ export default function DetailCard({ appointment, partner }) {
         </Text>
       </View>
 
-      
+      {/* Adresse partenaire */}
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Adresse :</Text>
         <Text style={styles.detailValue}>{appointment.partner_address_complete || "N/A"}</Text>
       </View>
 
+      {/* Tel partenaire */}
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Téléphone :</Text>
         <Text style={styles.detailValue}>
@@ -72,6 +77,7 @@ export default function DetailCard({ appointment, partner }) {
         </Text>
       </View>
 
+      {/* Date et Heure d appointment */}
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Date :</Text>
         <Text style={styles.detailValue}>{formatOdooDate(appointment.date_deadline)}</Text>
@@ -99,18 +105,18 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 14, 
     fontWeight: "600",
-    marginBottom: 2, 
+    marginBottom: 2,
     color: "#333",
   },
   detailValue: {
-    fontSize: 14, 
+    fontSize: 14,
     color: "#666",
     marginBottom: 4, 
   },
   errorCard: {
     backgroundColor: "#ffebee",
     borderRadius: 12,
-    padding: 16, 
+    padding: 16,
     marginHorizontal: 20,
     borderColor: "#f44336",
     borderWidth: 1,

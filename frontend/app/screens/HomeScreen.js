@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, FlatList, ActivityIndicator, Text } from "react-native";
+import { View, StyleSheet, FlatList, ActivityIndicator, Text, Keyboard } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -24,6 +24,24 @@ export default function HomeScreen() {
   const [userId, setUserId] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
   const [networkError, setNetworkError] = useState(false);
+  // Add keyboard visibility state
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  // Add keyboard event listeners
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+
+    return () => {
+      keyboardDidShowListener?.remove();
+      keyboardDidHideListener?.remove();
+    };
+  }, []);
 
   const normalizeDate = (dateString) => {
     if (!dateString) return null;
@@ -59,7 +77,11 @@ export default function HomeScreen() {
   const transformTasksToAppointments = useCallback((tasks) => {
     if (!tasks || !Array.isArray(tasks)) return [];
     
-    const today = getTodayNormalized();
+    const now = new Date(); // Current date and time
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1); // Start of tomorrow
     
     return tasks
       .filter(task => {
@@ -69,21 +91,27 @@ export default function HomeScreen() {
         
         if (!isValidTask) return false;
         
-        if (!task.date_deadline) return false; 
+        if (!task.date_deadline) {
+          return activeTab === "today";
+        }
         
-        const taskDate = normalizeDate(task.date_deadline);
-        if (!taskDate) return activeTab === "today";
-        
-        const timeDiff = taskDate.getTime() - today.getTime();
-        const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+        const taskDateTime = new Date(task.date_deadline);
+        if (isNaN(taskDateTime)) return false;
         
         switch (activeTab) {
           case "previous":
-            return daysDiff < 0;
+            // All tasks before now (past due)
+            return taskDateTime < now;
+            
           case "today":
-            return daysDiff === 0;
+            // Tasks scheduled for today (regardless of time)
+            // OR tasks that are overdue from previous days
+            return (taskDateTime >= today && taskDateTime < tomorrow);
+            
           case "upcoming":
-            return daysDiff > 0;
+            // Tasks scheduled for future dates (tomorrow and beyond)
+            return taskDateTime >= tomorrow;
+            
           default:
             return true;
         }
@@ -94,7 +122,16 @@ export default function HomeScreen() {
         
         if (task.timer_state === "start" && task.is_stop_maintenance === false) {
           status = "en cours";
-          statusColor = "#d62c1a"; 
+          statusColor = "#00853E"; 
+        } else if (task.date_deadline) {
+          const taskDateTime = new Date(task.date_deadline);
+          const now = new Date();
+          
+          // Mark as overdue if past the deadline
+          if (taskDateTime < now) {
+            status = "en retard";
+            statusColor = "#e74c3c"; // Red for overdue
+          }
         }
         
         return {
@@ -119,6 +156,7 @@ export default function HomeScreen() {
               }) 
             : null,
           is_stop_maintenance: task.is_stop_maintenance || false,
+          isOverdue: task.date_deadline && new Date(task.date_deadline) < new Date(),
         };
       })
       .sort((a, b) => {
@@ -130,15 +168,26 @@ export default function HomeScreen() {
         const dateA = new Date(a.date_deadline);
         const dateB = new Date(b.date_deadline);
         
-        // For "previous" tab, show most recent first (descending order)
+        // Get date parts for grouping by day
+        const dayA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate());
+        const dayB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate());
+        
         if (activeTab === "previous") {
-          return dateB.getTime() - dateA.getTime();
+          // For previous tab: Group by day (most recent day first), then by time (earliest first within each day)
+          if (dayA.getTime() !== dayB.getTime()) {
+            return dayB.getTime() - dayA.getTime(); // Most recent day first
+          }
+          return dateA.getTime() - dateB.getTime(); // Earliest time first within the day
         }
         
-        // For "today" and "upcoming", show earliest first (ascending order)
+        // For "today" and "upcoming": Group by day (earliest day first), then by time (earliest first within each day)
+        if (dayA.getTime() !== dayB.getTime()) {
+          return dayA.getTime() - dayB.getTime(); // Earliest day first
+        }
         return dateA.getTime() - dateB.getTime();
       });
   }, [activeTab]);
+  
 
   const fetchUserInfo = useCallback(async () => {
     if (!isConnected) {
@@ -304,11 +353,14 @@ export default function HomeScreen() {
 
       {renderContent()}
 
-      <BottomNavigation 
-        activeTab={activeTab} 
-        onTabChange={setActiveTab}
-        disabled={!isConnected}
-      />
+      {/* Hide bottom navigation when keyboard is visible */}
+      {!keyboardVisible && (
+        <BottomNavigation 
+          activeTab={activeTab} 
+          onTabChange={setActiveTab}
+          disabled={!isConnected}
+        />
+      )}
     </View>
   );
 }

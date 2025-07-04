@@ -72,7 +72,7 @@ export default function ProfileInfoScreen({ navigation }) {
   const pickImage = async (type) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: "images",
-      allowsEditing: true,
+      allowsEditing: false,
       aspect: [4, 3],
       quality: 1,
     })
@@ -85,7 +85,7 @@ export default function ProfileInfoScreen({ navigation }) {
 
   const takePhoto = async (type) => {
     const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
+      allowsEditing: false,
       aspect: [4, 3],
       quality: 1,
     })
@@ -273,9 +273,7 @@ export default function ProfileInfoScreen({ navigation }) {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={24} color="#3333CC" />
-        </TouchableOpacity>
+      
         
         <View style={styles.placeholder} />
       </View>
@@ -439,7 +437,7 @@ const styles = StyleSheet.create({
   },
   actionContainer: {
     marginTop: "auto",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   saveButton: {
     backgroundColor: '#2E3192',
