@@ -1,8 +1,8 @@
 import { View, Text, StyleSheet, Alert, TextInput, Modal, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 import DetailHeader from "./components/DetailHeader";
 import DetailCard from "./components/DetailCard";
@@ -92,39 +92,56 @@ export default function DetailScreen() {
       });
   };
 
-  useEffect(() => {
-    async function loadFilteredTasks() {
-      try {
-        const tasks = await fetchOdooTasks("", "all"); 
-        const filteredTasks = transformAndFilterTasks(tasks, category);
-        const taskIds = filteredTasks.map(task => task.id.toString());
-        setFilteredTaskIds(taskIds);
-        console.log(`Loaded ${filteredTasks.length} filtered tasks for category: ${category}`);
-      } catch (error) {
-        console.error('Error fetching filtered tasks:', error);
-        setFilteredTaskIds([]);
-      }
-    }
-
-    if (category) {
-      loadFilteredTasks();
-    }
-  }, [category]);
-
-  useEffect(() => {
+  // Function to load appointment data
+  const loadAppointment = useCallback(async () => {
     if (!id) return;
-  
-    async function loadAppointment() {
-      setLoading(true);
-      console.log('Fetching task with ID:', id);  
+    
+    setLoading(true);
+    console.log('Fetching task with ID:', id);  
+    try {
       const taskData = await fetchTaskById(id);
       console.log('Received task data:', taskData);  
       setAppointment(taskData);
+    } catch (error) {
+      console.error('Error fetching task:', error);
+      setAppointment(null);
+    } finally {
       setLoading(false);
     }
-  
-    loadAppointment();
   }, [id]);
+
+  // Function to load filtered tasks
+  const loadFilteredTasks = useCallback(async () => {
+    if (!category) return;
+    
+    try {
+      const tasks = await fetchOdooTasks("", "all"); 
+      const filteredTasks = transformAndFilterTasks(tasks, category);
+      const taskIds = filteredTasks.map(task => task.id.toString());
+      setFilteredTaskIds(taskIds);
+      console.log(`Loaded ${filteredTasks.length} filtered tasks for category: ${category}`);
+    } catch (error) {
+      console.error('Error fetching filtered tasks:', error);
+      setFilteredTaskIds([]);
+    }
+  }, [category]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadAppointment();
+      loadFilteredTasks();
+    }, [loadAppointment, loadFilteredTasks])
+  );
+
+  // Initial load
+  useEffect(() => {
+    loadAppointment();
+  }, [loadAppointment]);
+
+  useEffect(() => {
+    loadFilteredTasks();
+  }, [loadFilteredTasks]);
 
   if (loading) {
     return (
@@ -184,6 +201,9 @@ export default function DetailScreen() {
       const result = await startTaskInOdoo(id);
       
       if (result.success) {
+        // Refresh the task data after successful start
+        await loadAppointment();
+        
         router.push({
           pathname: "/Screens/InfoScreen",
           params: { id },
@@ -249,6 +269,16 @@ export default function DetailScreen() {
   };
 
   const handleTransfer = () => {
+    // Check if task is already started
+    if (appointment && appointment.timer_state === "start") {
+      Alert.alert(
+        "Impossible de transférer", 
+        "Cette tâche ne peut pas être transférée car elle a déjà été commencée.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     router.push({
       pathname: "/Screens/TransferScreen",
       params: { 
@@ -263,7 +293,6 @@ export default function DetailScreen() {
       <StatusBar style="auto" />
       <DetailHeader
         title="Tâche"
-        onTransfer={handleTransfer}
         category={currentAppointmentCategory}
         onSharePress={handleTransfer}
         hideTransfer={shouldHideTransfer}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { StyleSheet, View, Text, TouchableOpacity, Image, SafeAreaView, StatusBar, Button, Alert, ActivityIndicator } from "react-native"
+import { StyleSheet, View, Text, TouchableOpacity, Image, SafeAreaView, StatusBar, Button, Alert, ActivityIndicator, BackHandler } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import * as FileSystem from 'expo-file-system'
 import { Ionicons } from "@expo/vector-icons"
@@ -9,7 +9,7 @@ import { useRouter, useLocalSearchParams } from "expo-router"
 import { useOdooAttachments ,getRecordNameFromOdoo,savePhotosToOdoo,stopTacheInOdoo,uploadPhotoToOdoo} from '../utils/odooApi.js' 
 import { dbOperations } from '../utils/sqlite.js' 
 import * as Location from 'expo-location';
-import { useNetInfo } from '@react-native-community/netinfo';  
+import { useNetInfo } from '@react-native-community/netinfo';
 
 export default function ProfileInfoScreen({ navigation }) {
   
@@ -23,6 +23,24 @@ export default function ProfileInfoScreen({ navigation }) {
   const { id } = useLocalSearchParams()
   const [patientName, setPatientName] = useState("")
   const netInfo = useNetInfo()  
+
+  // Disable swipe gestures (iOS) and back button (Android)
+  useEffect(() => {
+    if (navigation) {
+      navigation.setOptions({
+        gestureEnabled: false, // Disable swipe gestures on iOS
+      });
+    }
+
+    // Handle Android back button
+    const onBackPress = () => {
+      return true; // Prevent default back behavior
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+    return () => subscription?.remove();
+  }, [navigation]);
 
   useEffect(() => {
     const fetchName = async () => {
