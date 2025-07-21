@@ -41,7 +41,13 @@ const calculateAddressQuality = (address, formattedAddress) => {
   // Street details
   if (address.streetNumber) score += 3;
   if (address.street) score += 3;
-  if (address.name) score += 2;
+  
+  // Check if name is a Plus Code (penalize)
+  if (address.name && isPlusCode(address.name)) {
+    score -= 2; // Penalize Plus Codes
+  } else if (address.name && isUsefulName(address.name)) {
+    score += 2; // Reward useful names
+  }
   
   // Area details
   if (address.district) score += 2;
@@ -57,7 +63,36 @@ const calculateAddressQuality = (address, formattedAddress) => {
 };
 
 /**
+ * Helper function to detect Plus Codes
+ */
+const isPlusCode = (text) => {
+  if (!text) return false;
+  // Plus codes typically follow pattern: XXXX+XX or 2X4X+MM
+  const plusCodeRegex = /^[23456789CFGHJMPQRVWX]{4}\+[23456789CFGHJMPQRVWX]{2,3}$/;
+  return plusCodeRegex.test(text.replace(/\s/g, ''));
+};
+
+/**
+ * Helper function to check if name is useful
+ */
+const isUsefulName = (name) => {
+  if (!name) return false;
+  const lowerName = name.toLowerCase();
+  
+  // Skip if it's unnamed, plus code, or just coordinates
+  if (lowerName.includes('unnamed') || 
+      lowerName.includes('sans nom') ||
+      isPlusCode(name) ||
+      /^\d+\.?\d*,\s*\d+\.?\d*$/.test(name)) { // coordinates pattern
+    return false;
+  }
+  
+  return true;
+};
+
+/**
  * Format address with priority to details and avoid redundancy
+ * Now handles Plus Codes properly
  */
 const formatAddress = (address) => {
   const parts = [];
@@ -69,6 +104,7 @@ const formatAddress = (address) => {
   const hasCompleteStreetInName = address.name && 
     address.streetNumber && 
     address.street &&
+    isUsefulName(address.name) &&
     address.name.includes(address.streetNumber) &&
     address.name.toLowerCase().includes(address.street.toLowerCase());
   
@@ -81,8 +117,8 @@ const formatAddress = (address) => {
   } else if (address.street) {
     // Just street name
     streetPart = address.street;
-  } else if (address.name && !address.name.toLowerCase().includes('unnamed')) {
-    // Use name as fallback if no street info
+  } else if (isUsefulName(address.name)) {
+    // Use name as fallback only if it's useful
     streetPart = address.name;
   }
   
@@ -102,6 +138,17 @@ const formatAddress = (address) => {
   
   // Add country
   if (address.country) parts.push(address.country);
+  
+  // If we end up with no street info, add a more descriptive prefix
+  if (parts.length > 0 && !streetPart) {
+    // Add a general area indicator if no specific street
+    if (address.district || address.subLocality) {
+      // We have some area info, which is good enough
+    } else {
+      // Very generic location
+      parts[0] = `Zone de ${parts[0]}`;
+    }
+  }
   
   // Note: Removed region/state as per requirement
   
@@ -170,6 +217,7 @@ const processGeocodingQueue = async () => {
 
 /**
  * Reverse geocode with retries - optimized for poor connectivity
+ * Updated to handle complete failure case
  */
 const reverseGeocodeWithRetries = async (latitude, longitude, maxRetries = 5, useQueue = true) => {
   if (useQueue) {
@@ -238,7 +286,8 @@ const reverseGeocodeWithRetries = async (latitude, longitude, maxRetries = 5, us
   }
   
   console.error('All attempts failed:', lastError?.message);
-  throw lastError || new Error('Geocoding failed after all retries');
+  // Don't throw error - let the calling function handle the null result
+  return null; // This will cause "Adresse inaccessible" to be returned
 };
 
 /**
@@ -266,6 +315,7 @@ export const requestLocationPermission = async () => {
 
 /**
  * Main reverse geocoding function with cache and retries
+ * Now returns "Adresse inaccessible" when geocoding fails
  */
 export const reverseGeocode = async (latitude, longitude, options = {}) => {
   const {
@@ -308,7 +358,7 @@ export const reverseGeocode = async (latitude, longitude, options = {}) => {
       }
     }
     
-    return result ? result.address : null;
+    return result ? result.address : 'Adresse inaccessible';
     
   } catch (error) {
     console.error(' Geocoding failed completely:', error);
@@ -323,7 +373,8 @@ export const reverseGeocode = async (latitude, longitude, options = {}) => {
       }
     }
     
-    return null;
+    // Return "Adresse inaccessible" instead of null when all fails
+    return 'Adresse inaccessible';
   }
 };
 
@@ -369,6 +420,7 @@ export const getCurrentLocation = async (options = {}) => {
 
 /**
  * Get current location with address - optimized for poor connectivity
+ * Now returns "Adresse inaccessible" when geocoding fails
  */
 export const getCurrentLocationWithAddress = async (options = {}) => {
   try {
@@ -385,7 +437,7 @@ export const getCurrentLocationWithAddress = async (options = {}) => {
     
     return {
       ...location,
-      address: address || 'Adresse inconnue'
+      address: address || 'Adresse inaccessible' // Double fallback
     };
   } catch (error) {
     console.error('Error getting location with address:', error);
@@ -409,6 +461,7 @@ export const formatDateForOdoo = (date = new Date()) => {
 
 /**
  * Get location, time and address for Odoo - poor connectivity optimized
+ * Now handles "Adresse inaccessible" case
  */
 export const getLocationTimeAndAddress = async (options = {}) => {
   console.log('Getting location, time and address for Odoo (poor connectivity)...');
@@ -421,7 +474,7 @@ export const getLocationTimeAndAddress = async (options = {}) => {
     longitude: location.longitude,
     timestamp: formatDateForOdoo(),
     accuracy: location.accuracy,
-    address: location.address
+    address: location.address // Will be "Adresse inaccessible" if geocoding failed
   };
 };
 
