@@ -37,28 +37,31 @@ const generateCacheKey = (latitude, longitude) => {
  */
 const calculateAddressQuality = (address, formattedAddress) => {
   let score = 0;
-  
+
+  // If formatted address is null (Plus Code only), return very low score
+  if (!formattedAddress) return -10;
+
   // Street details
   if (address.streetNumber) score += 3;
   if (address.street) score += 3;
-  
-  // Check if name is a Plus Code (penalize)
+
+  // Check if name is a Plus Code (penalize heavily)
   if (address.name && isPlusCode(address.name)) {
-    score -= 2; // Penalize Plus Codes
+    score -= 5; // Heavy penalty for Plus Codes
   } else if (address.name && isUsefulName(address.name)) {
     score += 2; // Reward useful names
   }
-  
+
   // Area details
   if (address.district) score += 2;
   if (address.subLocality) score += 2;
   if (address.postalCode) score += 1;
-  
+
   // Complexity bonus
   const parts = formattedAddress.split(',').length;
   if (parts >= 4) score += 1;
   if (parts >= 6) score += 1;
-  
+
   return score;
 };
 
@@ -78,36 +81,36 @@ const isPlusCode = (text) => {
 const isUsefulName = (name) => {
   if (!name) return false;
   const lowerName = name.toLowerCase();
-  
+
   // Skip if it's unnamed, plus code, or just coordinates
-  if (lowerName.includes('unnamed') || 
-      lowerName.includes('sans nom') ||
-      isPlusCode(name) ||
-      /^\d+\.?\d*,\s*\d+\.?\d*$/.test(name)) { // coordinates pattern
+  if (lowerName.includes('unnamed') ||
+    lowerName.includes('sans nom') ||
+    isPlusCode(name) ||
+    /^\d+\.?\d*,\s*\d+\.?\d*$/.test(name)) { // coordinates pattern
     return false;
   }
-  
+
   return true;
 };
 
 /**
  * Format address with priority to details and avoid redundancy
- * Now handles Plus Codes properly
+ * Now returns null if only Plus Code is available
  */
 const formatAddress = (address) => {
   const parts = [];
-  
+
   // Handle street address - avoid redundancy
   let streetPart = '';
-  
+
   // Check if name already contains the complete street information
-  const hasCompleteStreetInName = address.name && 
-    address.streetNumber && 
+  const hasCompleteStreetInName = address.name &&
+    address.streetNumber &&
     address.street &&
     isUsefulName(address.name) &&
     address.name.includes(address.streetNumber) &&
     address.name.toLowerCase().includes(address.street.toLowerCase());
-  
+
   if (hasCompleteStreetInName) {
     // Use name as it already contains complete street info
     streetPart = address.name;
@@ -118,27 +121,38 @@ const formatAddress = (address) => {
     // Just street name
     streetPart = address.street;
   } else if (isUsefulName(address.name)) {
-    // Use name as fallback only if it's useful
+    // Use name as fallback only if it's useful (not Plus Code)
     streetPart = address.name;
   }
-  
+
   if (streetPart) {
     parts.push(streetPart);
   }
-  
+
   // Add district/sublocality
   if (address.district) parts.push(address.district);
   if (address.subLocality) parts.push(address.subLocality);
-  
+
   // Add city (required)
   if (address.city) parts.push(address.city);
-  
+
   // Add postal code if available
   if (address.postalCode) parts.push(address.postalCode);
-  
+
   // Add country
   if (address.country) parts.push(address.country);
-  
+
+  // **KEY FIX**: Check if we only have Plus Code information
+  if (parts.length === 0) {
+    // No useful parts found, return null to trigger "Adresse inaccessible"
+    return null;
+  }
+
+  // If the only meaningful part is a Plus Code in the name, return null
+  if (parts.length === 1 && address.name && isPlusCode(address.name)) {
+    return null;
+  }
+
   // If we end up with no street info, add a more descriptive prefix
   if (parts.length > 0 && !streetPart) {
     // Add a general area indicator if no specific street
@@ -149,10 +163,17 @@ const formatAddress = (address) => {
       parts[0] = `Zone de ${parts[0]}`;
     }
   }
-  
+
   // Note: Removed region/state as per requirement
-  
-  return parts.join(', ');
+
+  const finalAddress = parts.join(', ');
+
+  // Si l'adresse finale est juste un Plus Code, retourner null
+  if (isPlusCode(finalAddress.trim())) {
+    return null;
+  }
+
+  return finalAddress;
 };
 
 /**
@@ -161,24 +182,30 @@ const formatAddress = (address) => {
 const singleReverseGeocode = async (latitude, longitude) => {
   try {
     console.log(' Attempting reverse geocoding...');
-    
+
     const results = await Location.reverseGeocodeAsync({
       latitude,
       longitude,
     });
-    
+
     if (results && results.length > 0) {
       const address = results[0];
       const formattedAddress = formatAddress(address);
+
+      // Si c'est juste un Plus Code, ignorer ce résultat
+      if (!formattedAddress) {
+        return null;
+      }
+
       const quality = calculateAddressQuality(address, formattedAddress);
-      
+
       return {
         address: formattedAddress,
         quality,
         raw: address
       };
     }
-    
+
     return null;
   } catch (error) {
     console.error(' Geocoding attempt failed:', error);
@@ -191,33 +218,33 @@ const singleReverseGeocode = async (latitude, longitude) => {
  */
 const processGeocodingQueue = async () => {
   if (isProcessingQueue || geocodingQueue.length === 0) return;
-  
+
   isProcessingQueue = true;
   console.log(`Processing ${geocodingQueue.length} queued requests...`);
-  
+
   while (geocodingQueue.length > 0) {
     const { latitude, longitude, resolve, reject, maxRetries } = geocodingQueue.shift();
-    
+
     try {
       const result = await reverseGeocodeWithRetries(latitude, longitude, maxRetries, false);
       resolve(result);
     } catch (error) {
       reject(error);
     }
-    
+
     // Wait between requests for poor connectivity
     if (geocodingQueue.length > 0) {
       await new Promise(resolve => setTimeout(resolve, THROTTLE_DELAY));
     }
   }
-  
+
   isProcessingQueue = false;
   console.log('Queue processing completed');
 };
 
 /**
  * Reverse geocode with retries - optimized for poor connectivity
- * Updated to handle complete failure case
+ * Updated to handle complete failure case and Plus Codes
  */
 const reverseGeocodeWithRetries = async (latitude, longitude, maxRetries = 5, useQueue = true) => {
   if (useQueue) {
@@ -226,51 +253,51 @@ const reverseGeocodeWithRetries = async (latitude, longitude, maxRetries = 5, us
       processGeocodingQueue();
     });
   }
-  
+
   let bestResult = null;
-  let bestScore = 0;
+  let bestScore = -999; // Start with very low score
   let lastError = null;
-  
+
   console.log(` Starting geocoding with ${maxRetries} retries for poor connectivity`);
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Attempt ${attempt}/${maxRetries}`);
-      
+
       const result = await singleReverseGeocode(latitude, longitude);
-      
+
       if (result) {
         console.log(`Quality: ${result.quality}, Address: "${result.address}"`);
-        
+
         if (result.quality > bestScore) {
           bestResult = result;
           bestScore = result.quality;
         }
-        
-        // For poor connectivity, accept good results quickly
+
+        // For poor connectivity, accept good results quickly (but not Plus Codes)
         if (result.quality >= 6) {
           console.log(' High quality result - stopping retries');
           break;
         }
-        
-        // Accept medium quality after half the attempts
+
+        // Accept medium quality after half the attempts (but not Plus Codes)
         if (result.quality >= 4 && attempt >= Math.ceil(maxRetries / 2)) {
           console.log('Acceptable quality result - stopping retries');
           break;
         }
       }
-      
+
       // Progressive delay for poor connectivity
       if (attempt < maxRetries) {
         const delay = Math.min(2000 * Math.pow(1.5, attempt - 1), 8000); // Max 8s for poor connectivity
         console.log(`Waiting ${delay}ms for poor connectivity...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
-      
+
     } catch (error) {
       console.error(`Attempt ${attempt} failed:`, error.message);
       lastError = error;
-      
+
       // Longer delays on errors for poor connectivity
       if (attempt < maxRetries) {
         const delay = Math.min(3000 * Math.pow(2, attempt - 1), 15000); // Max 15s
@@ -279,15 +306,16 @@ const reverseGeocodeWithRetries = async (latitude, longitude, maxRetries = 5, us
       }
     }
   }
-  
-  if (bestResult) {
+
+  // Only return result if it has positive quality (not Plus Code)
+  if (bestResult && bestScore > 0) {
     console.log(`Best result (score: ${bestScore}): "${bestResult.address}"`);
-    return bestResult; // Return the complete result object
+    return bestResult;
   }
-  
-  console.error('All attempts failed:', lastError?.message);
-  // Don't throw error - let the calling function handle the null result
-  return null; // This will cause "Adresse inaccessible" to be returned
+
+  console.log('All attempts failed or only Plus Codes found - returning null');
+  // Return null if only Plus Codes were found
+  return null;
 };
 
 /**
@@ -296,7 +324,7 @@ const reverseGeocodeWithRetries = async (latitude, longitude, maxRetries = 5, us
 export const requestLocationPermission = async () => {
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
-    
+
     if (status !== 'granted') {
       Alert.alert(
         'Permission refusée',
@@ -305,7 +333,7 @@ export const requestLocationPermission = async () => {
       );
       return false;
     }
-    
+
     return true;
   } catch (error) {
     console.error('Permission error:', error);
@@ -315,7 +343,7 @@ export const requestLocationPermission = async () => {
 
 /**
  * Main reverse geocoding function with cache and retries
- * Now returns "Adresse inaccessible" when geocoding fails
+ * Now returns "Adresse inaccessible" when geocoding fails OR only Plus Codes found
  */
 export const reverseGeocode = async (latitude, longitude, options = {}) => {
   const {
@@ -323,57 +351,65 @@ export const reverseGeocode = async (latitude, longitude, options = {}) => {
     useCache = true,
     forceRefresh = false
   } = options;
-  
+
   try {
     console.log('Starting geocoding for poor connectivity');
-    
+
     cleanExpiredCache();
-    
+
     const cacheKey = generateCacheKey(latitude, longitude);
-    
-    // Check cache first - critical for poor connectivity
+
+    // Check cache first - but reject cached Plus Codes
     if (useCache && !forceRefresh && geocodingCache.has(cacheKey)) {
       const cached = geocodingCache.get(cacheKey);
-      console.log(' Using cached result (saves network):', cached.address);
-      return cached.address;
+      // Don't use cached results that might be Plus Codes
+      if (cached.quality > 0) {
+        console.log(' Using cached result (saves network):', cached.address);
+        return cached.address;
+      } else {
+        // Remove bad cached result
+        geocodingCache.delete(cacheKey);
+      }
     }
-    
+
     // Perform geocoding with retries - get the complete result object
     const result = await reverseGeocodeWithRetries(latitude, longitude, maxRetries);
-    
-    // Cache successful results - important for poor connectivity
-    if (useCache && result && result.address) {
+
+    // Cache successful results - but not Plus Codes
+    if (useCache && result && result.address && result.quality > 0) {
       geocodingCache.set(cacheKey, {
         address: result.address,
         timestamp: Date.now(),
         quality: result.quality
       });
-      
+
       console.log('Cached for poor connectivity (quality:', result.quality, ')');
-      
+
       // Manage cache size
       if (geocodingCache.size > MAX_CACHE_SIZE) {
         const oldestKey = geocodingCache.keys().next().value;
         geocodingCache.delete(oldestKey);
       }
     }
-    
+
     return result ? result.address : 'Adresse inaccessible';
-    
+
   } catch (error) {
     console.error(' Geocoding failed completely:', error);
-    
-    // For poor connectivity, return expired cache as last resort
+
+    // For poor connectivity, return expired cache as last resort (but not Plus Codes)
     if (useCache) {
       const cacheKey = generateCacheKey(latitude, longitude);
       if (geocodingCache.has(cacheKey)) {
         const cached = geocodingCache.get(cacheKey);
-        console.log(' Using expired cache as fallback for poor connectivity');
-        return cached.address;
+        if (cached.quality > 0) {
+          console.log(' Using expired cache as fallback for poor connectivity');
+          return cached.address;
+        }
       }
     }
-    
-    // Return "Adresse inaccessible" instead of null when all fails
+
+    // Return "Adresse inaccessible" when all fails or only Plus Codes found
     return 'Adresse inaccessible';
   }
 };
@@ -395,24 +431,24 @@ export const getCurrentLocation = async (options = {}) => {
     };
 
     console.log('Getting location (poor connectivity mode)...');
-    
+
     const location = await Location.getCurrentPositionAsync(defaultOptions);
-    
+
     return {
       latitude: location.coords.latitude,
       longitude: location.coords.longitude,
       accuracy: location.coords.accuracy,
       timestamp: location.timestamp
     };
-    
+
   } catch (error) {
     console.error('Location error:', error);
-    
+
     let errorMessage = 'Impossible de récupérer votre position.';
     if (error.code === 'E_LOCATION_TIMEOUT') {
       errorMessage = 'Connexion lente détectée. Vérifiez votre signal GPS et réseau.';
     }
-    
+
     Alert.alert('Erreur de géolocalisation', errorMessage, [{ text: 'OK' }]);
     return null;
   }
@@ -420,12 +456,12 @@ export const getCurrentLocation = async (options = {}) => {
 
 /**
  * Get current location with address - optimized for poor connectivity
- * Now returns "Adresse inaccessible" when geocoding fails
+ * Now returns "Adresse inaccessible" when geocoding fails or only Plus Codes found
  */
 export const getCurrentLocationWithAddress = async (options = {}) => {
   try {
     console.log(' Getting location with address (poor connectivity)...');
-    
+
     const location = await getCurrentLocation(options);
     if (!location) return null;
 
@@ -434,7 +470,7 @@ export const getCurrentLocationWithAddress = async (options = {}) => {
       maxRetries: 3, // Fewer retries to save time
       useCache: true
     });
-    
+
     return {
       ...location,
       address: address || 'Adresse inaccessible' // Double fallback
@@ -455,26 +491,23 @@ export const formatDateForOdoo = (date = new Date()) => {
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const seconds = String(date.getSeconds()).padStart(2, '0');
-  
+
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
 
-/**
- * Get location, time and address for Odoo - poor connectivity optimized
- * Now handles "Adresse inaccessible" case
- */
+
 export const getLocationTimeAndAddress = async (options = {}) => {
   console.log('Getting location, time and address for Odoo (poor connectivity)...');
-  
+
   const location = await getCurrentLocationWithAddress(options);
   if (!location) return null;
-  
+
   return {
     latitude: location.latitude,
     longitude: location.longitude,
     timestamp: formatDateForOdoo(),
     accuracy: location.accuracy,
-    address: location.address // Will be "Adresse inaccessible" if geocoding failed
+    address: location.address // Will be "Adresse inaccessible" if geocoding failed or Plus Code found
   };
 };
 
@@ -493,7 +526,7 @@ export const getCacheStats = () => {
   const now = Date.now();
   let validEntries = 0;
   let expiredEntries = 0;
-  
+
   for (const [key, value] of geocodingCache.entries()) {
     if (now - value.timestamp > CACHE_EXPIRY_TIME) {
       expiredEntries++;
@@ -501,7 +534,7 @@ export const getCacheStats = () => {
       validEntries++;
     }
   }
-  
+
   return {
     total: geocodingCache.size,
     valid: validEntries,
