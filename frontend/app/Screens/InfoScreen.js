@@ -106,13 +106,14 @@ export default function ProfileInfoScreen({ navigation }) {
       allowsEditing: false,
       aspect: [4, 3],
       quality: 1,
+      saveToPhotos: false, 
     })
 
     if (!result.canceled) {
       await processImage(result.assets[0].uri, type);
       setActiveSection(null);
     }
-  }
+    }
 
   const handleImagePress = (type) => {
     setActiveSection(activeSection === type ? null : type)

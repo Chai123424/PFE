@@ -48,7 +48,6 @@ const fetchPartnerDetails = async (partnerId) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-
     const data = await response.json();
     console.log('Partner details API response:', data);
     
